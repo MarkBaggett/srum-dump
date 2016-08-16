@@ -69,7 +69,7 @@ def load_interfaces(reg_file):
     from Registry import Registry
     import struct
     try:
-        reg_handle = Registry.Registry("SOFTWARE")
+        reg_handle = Registry.Registry(reg_file)
     except Exception as e:
         print "I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one."
         print "Error : ", str(e)
