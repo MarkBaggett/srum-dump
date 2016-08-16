@@ -130,7 +130,9 @@ parser.add_argument("--quiet",help = "Supress unneeded output messages.",action=
 
 options = parser.parse_args()
 
+interactive_mode = False
 if not options.ESE_INFILE:
+    interactive_mode = True
     options.ESE_INFILE = raw_input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
     options.XLSX_OUTFILE = raw_input(r"What is my output file name (including path) (Ex: \users\me\Desktop\resultx.xlsx) : ")
     options.XLSX_TEMPLATE = raw_input("What XLS Template should I use? (Press enter for the Default SRUM_TEMPLATE.XLSX) : ")
@@ -273,3 +275,9 @@ try:
 except Exception as e:
     print "I was unable to write the output file.  Do you have an old version open?  If not this is probably a path or permissions issue."
     print "Error : ", str(e)
+
+print "Finished!"
+if interactive_mode:
+    raw_input("Press enter to exit")
+
+
