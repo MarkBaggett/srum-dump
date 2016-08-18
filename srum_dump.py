@@ -1,5 +1,6 @@
 from impacket import ese
 from datetime import datetime,timedelta
+import os
 import sys
 import struct
 import re
@@ -9,7 +10,6 @@ import argparse
 import warnings
 import hashlib
 import random
-
 
 def BinarySIDtoStringSID(sid):
   #Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
@@ -67,13 +67,12 @@ def file_timestamp(binblob,timeformat="%Y-%m-%d %H:%M:%S"):
 
 def load_interfaces(reg_file):
     from Registry import Registry
-    import struct
     try:
         reg_handle = Registry.Registry(reg_file)
     except Exception as e:
         print "I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one."
         print "Error : ", str(e)
-        sys.exit(1)
+        abort(1)
     int_keys = reg_handle.open('Microsoft\\WlanSvc\\Interfaces')
     profile_lookup = {}
     for eachinterface in int_keys.subkeys():
@@ -111,8 +110,18 @@ def load_lookups(database):
             print "unknown entry type in IdMapTable"
             #print rec_entry
     return id_lookup
+
+def abort(error_code):
+    if interactive_mode:
+        raw_input("Press enter to exit")
+    sys.exit(error_code)
+
+def rotating_list(somelist):
+    while True:
+        for x in somelist:
+           yield x
           
-ads = (x for x in ["Mark Baggett and Don Williams wrote this program in 3 days. Coding in Python is easy.   Check out SANS Automating Infosec with Python SEC573 to learn to write program like this on your own.",
+ads = rotating_list(["Mark Baggett and Don Williams wrote the first working copy of this program in less than 1 days. Coding in Python is easy.   Check out SANS Automating Infosec with Python SEC573 to learn to write program like this on your own.",
        "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensics FOR408",
        "This program uses the function BinarySIDtoStringSID from the GRR code base to convert binary data into a user SID and relies heavily on the CoreSecurity Impacket ESE module. This works because of them.  Check them out!",
        "Yogesh Khatri's paper at https://files.sans.org/summit/Digital_Forensics_and_Incident_Response_Summit_2015/PDFs/Windows8SRUMForensicsYogeshKhatri.pdf was essential in the creation of this tool.",
@@ -122,11 +131,11 @@ ads = (x for x in ["Mark Baggett and Don Williams wrote this program in 3 days. 
        ])
 
 parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
-parser.add_argument("--ESE_INFILE", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
-parser.add_argument("--XLSX_OUTFILE", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
-parser.add_argument("--XLSX_TEMPLATE" ,help = "The Excel Template that specifies what data to extract from the srum database. You can create templates with ese_template.py.")
-parser.add_argument("--REG_HIVE", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
-parser.add_argument("--quiet",help = "Supress unneeded output messages.",action="store_true")
+parser.add_argument("--ESE_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
+parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
+parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create templates with ese_template.py.")
+parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
+parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
 
 options = parser.parse_args()
 
@@ -134,8 +143,8 @@ interactive_mode = False
 if not options.ESE_INFILE:
     interactive_mode = True
     options.ESE_INFILE = raw_input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
-    options.XLSX_OUTFILE = raw_input(r"What is my output file name (including path) (Ex: \users\me\Desktop\resultx.xlsx) : ")
-    options.XLSX_TEMPLATE = raw_input("What XLS Template should I use? (Press enter for the Default SRUM_TEMPLATE.XLSX) : ")
+    options.XLSX_OUTFILE = raw_input(r"What is my output file name (Press enter for the default SRUM_DUMP_OUTPUT.xlsx) (Ex: \users\me\Desktop\resultx.xlsx) : ")
+    options.XLSX_TEMPLATE = raw_input("What XLS Template should I use? (Press enter for the default SRUM_TEMPLATE.XLSX) : ")
     options.reghive = raw_input("What is the full path of the SOFTWARE registry hive? Usually \image-mount-point\Windows\System32\config\SOFTWARE (or press enter to skip Network resolution) : ")
 
 if not options.XLSX_TEMPLATE:
@@ -143,6 +152,18 @@ if not options.XLSX_TEMPLATE:
 
 if not options.XLSX_OUTFILE:
     options.XLSX_OUTFILE = "SRUM_DUMP_OUTPUT.xlsx"
+
+if not os.path.exists(options.ESE_INFILE):
+    print "ESE File Not found: "+options.ESE_INFILE
+    abort(1)
+
+if not os.path.exists(options.XLSX_TEMPLATE):
+    print "Template File Not found: "+options.XLSX_TEMPLATE
+    abort(1)
+
+if options.reghive and not os.path.exists(options.reghive):
+    print "Registry File Not found: "+options.reghive
+    abort(1)
 
 if options.reghive:
     interface_table = load_interfaces(options.reghive)
@@ -153,15 +174,14 @@ try:
 except Exception as e:
     print "I could not open the specified SRUM file. Check your path and file name."
     print "Error : ", str(e)
-    sys.exit(1)
+    abort(1)
 
 try:
     template_wb = openpyxl.load_workbook(filename=options.XLSX_TEMPLATE, read_only=True)
 except Exception as e:
     print "I could not open the specified template file %s. Check your path and file name." % (options.XLSX_TEMPLATE)
     print "Error : ", str(e)
-    sys.exit(1)
-
+    abort(1)
 
 id_table = load_lookups(ese_db)
 target_wb = openpyxl.Workbook()
@@ -175,11 +195,9 @@ for each_sheet in sheets:
     ese_template_fields = []
     ese_template_formats = []
     ese_template_styles = []
-    #Note: Problems will occur if there are more than 10000 columns
-    for eachcolumn in range(1,10000):
+    #Read the first Row B & C in the template into lists so we know what data we are to extract
+    for eachcolumn in range(1,template_sheet.max_column+1):
         field_name = template_sheet.cell(row = 2, column = eachcolumn).value
-        if eachcolumn==9999:
-            print "Warning:The template worksheet has 9999 columns. That is the max. IF there is another one then this program can't read it."
         if field_name == None:
             break
         field_style = template_sheet.cell(row = 2, column = eachcolumn).style 
@@ -188,20 +206,20 @@ for each_sheet in sheets:
         ese_template_styles.append(field_style)
         ese_template_fields.append(field_name.strip())
     #Now open the specified table in the ESE database for this sheet
-    try:
-        ese_table = ese_db.openTable(ese_template_table)
-    except Exception as e:
+    ese_table = ese_db.openTable(ese_template_table)
+    #If the table is not found it returns None
+    if not ese_table:
         print "Unable to find table",ese_template_table
-        print "Error: "+str(e)
         continue
+
     #Now create the worksheet in the new xls file with the same name as the template
-    print "Creating Sheet "+each_sheet
+    print "\nCreating Sheet "+each_sheet
 
     if not options.quiet:
-            try:
-               ad = ads.next()
-            except:
-               ad = "Thanks for using srum_dump!"
+        try:
+            ad = ads.next()
+        except:
+            ad = "Thanks for using srum_dump!"
     print "While you wait, did you know ...\n"+ad+"\n"
     xls_sheet = target_wb.create_sheet(title=each_sheet)
     #Now copy the header values and header formats from the template to the new worksheet
@@ -214,54 +232,56 @@ for each_sheet in sheets:
         header_row.append(new_cell)
     xls_sheet.append(header_row)
     #Until we get an empty row retrieve the rows from the ESE table and process them
+    row_num = 1 #Init to 1, first row will be 2 in spreadsheet (1 is headers)
     while True:
         ese_row = ese_db.getNextRow(ese_table)
         if ese_row == None:
             break
         #The row is retrieved now use the template to figure out which ones you want and format them
         xls_row = []
+        row_num += 1
         for eachcolumn,eachformat,eachstyle in zip(ese_template_fields,ese_template_formats,ese_template_styles):
             if eachcolumn == "#XLS_COLUMN#":
-                val = eachformat
+                val = eachformat.replace("#ROW_NUM#", str(row_num))
             else:
-                val = ese_row.get(eachcolumn,"Error")
-            if val=="Error":
-                val = "WARNING: Invalid Column Name " + eachcolumn+ " - Try one of these:"+str(ese_template_fields) + str(eachcolumn in ese_template_fields)
-            elif val==None:
-                val="None"
-            elif eachformat == None:
-                pass
-            elif eachformat.startswith("OLE:"):
-                val = ole_timestamp(val, eachformat[4:])
-            elif eachformat.startswith("FILE:"):
-                val = file_timestamp(val,eachformat[5:])
-            elif eachformat.lower() == "lookup_id":
-                val = id_table[val]
-            elif eachformat.lower() == "md5":
-                val = hashlib.md5(str(val)).hexdigest()
-            elif eachformat.lower() == "sha1":
-                val = hashlib.sha1(str(val)).hexdigest()
-            elif eachformat.lower() == "sha256":
-                val = hashlib.sha256(str(val)).hexdigest()
-            elif eachformat.lower() == "base16":
-                if type(val)=="<type 'int'>":
-                    val = hex(val)
+                val = ese_row.get(eachcolumn,"UNABLETORETRIEVECOLUMN")
+                if val=="UNABLETORETRIEVECOLUMN":
+                    val = "WARNING: Invalid Column Name " + eachcolumn+ " - Try one of these:"+str(ese_template_fields) + str(eachcolumn in ese_template_fields)
+                elif val==None:
+                    val="None"
+                elif eachformat == None:
+                    pass
+                elif eachformat.startswith("OLE:"):
+                    val = ole_timestamp(val, eachformat[4:])
+                elif eachformat.startswith("FILE:"):
+                    val = file_timestamp(val,eachformat[5:])
+                elif eachformat.lower() == "lookup_id":
+                    val = id_table[val]
+                elif eachformat.lower() == "md5":
+                    val = hashlib.md5(str(val)).hexdigest()
+                elif eachformat.lower() == "sha1":
+                    val = hashlib.sha1(str(val)).hexdigest()
+                elif eachformat.lower() == "sha256":
+                    val = hashlib.sha256(str(val)).hexdigest()
+                elif eachformat.lower() == "base16":
+                    if type(val)=="<type 'int'>":
+                        val = hex(val)
+                    else:
+                        val = str(val).encode("hex")
+                elif eachformat.lower() == "base2":
+                    if type(val)==int:
+                        val = bin(val)
+                    else:
+                        try:
+                            val = int(str(val),2)
+                        except :
+                            val = "Warning: Unable to convert value %s to binary." % (val)
+                elif eachformat.lower() == "interface_id" and options.reghive:
+                    val = interface_table.get(str(val),"")
+                elif eachformat.lower() == "interface_id" and not options.reghive:
+                    val = "WARNING: Ignoring interface_id format command because the --REG_HIVE was not specified."
                 else:
-                    val = str(val).encode("hex")
-            elif eachformat.lower() == "base2":
-                if type(val)==int:
-                    val = bin(val)
-                else:
-                    try:
-                        val = int(str(val),2)
-                    except :
-                        val = "Warning: Unable to convert value %s to binary." % (val)
-            elif eachformat.lower() == "interface_id" and options.reghive:
-                val = interface_table.get(str(val),"")
-            elif eachformat.lower() == "interface_id" and not options.reghive:
-                val = "WARNING: Ignoring interface_id format command because the --REG_HIVE was not specified."
-            else:
-                val =  "WARNING: I'm not sure what to do with the format command %s.  It was ignored." % (eachformat)
+                    val =  "WARNING: I'm not sure what to do with the format command %s.  It was ignored." % (eachformat)
             new_cell = WriteOnlyCell(xls_sheet, value=val)
             new_cell.style = eachstyle
             #print dir(new_cell.style.font)
@@ -279,5 +299,3 @@ except Exception as e:
 print "Finished!"
 if interactive_mode:
     raw_input("Press enter to exit")
-
-
