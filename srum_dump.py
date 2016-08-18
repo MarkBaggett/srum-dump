@@ -116,6 +116,44 @@ def abort(error_code):
         raw_input("Press enter to exit")
     sys.exit(error_code)
 
+def format_output(val,eachformat):
+    if val==None:
+        val="None"
+    elif eachformat == None:
+        pass
+    elif eachformat.startswith("OLE:"):
+        val = ole_timestamp(val, eachformat[4:])
+    elif eachformat.startswith("FILE:"):
+        val = file_timestamp(val,eachformat[5:])
+    elif eachformat.lower() == "lookup_id":
+        val = id_table[val]
+    elif eachformat.lower() == "md5":
+        val = hashlib.md5(str(val)).hexdigest()
+    elif eachformat.lower() == "sha1":
+        val = hashlib.sha1(str(val)).hexdigest()
+    elif eachformat.lower() == "sha256":
+        val = hashlib.sha256(str(val)).hexdigest()
+    elif eachformat.lower() == "base16":
+        if type(val)=="<type 'int'>":
+            val = hex(val)
+        else:
+            val = str(val).encode("hex")
+    elif eachformat.lower() == "base2":
+        if type(val)==int:
+            val = bin(val)
+        else:
+            try:
+                val = int(str(val),2)
+            except :
+                val = "Warning: Unable to convert value %s to binary." % (val)
+    elif eachformat.lower() == "interface_id" and options.reghive:
+        val = interface_table.get(str(val),"")
+    elif eachformat.lower() == "interface_id" and not options.reghive:
+        val = "WARNING: Ignoring interface_id format command because the --REG_HIVE was not specified."
+    else:
+        val =  "WARNING: I'm not sure what to do with the format command %s.  It was ignored." % (eachformat)    
+    return val
+
 def rotating_list(somelist):
     while True:
         for x in somelist:
@@ -247,41 +285,8 @@ for each_sheet in sheets:
                 val = ese_row.get(eachcolumn,"UNABLETORETRIEVECOLUMN")
                 if val=="UNABLETORETRIEVECOLUMN":
                     val = "WARNING: Invalid Column Name " + eachcolumn+ " - Try one of these:"+str(ese_template_fields) + str(eachcolumn in ese_template_fields)
-                elif val==None:
-                    val="None"
-                elif eachformat == None:
-                    pass
-                elif eachformat.startswith("OLE:"):
-                    val = ole_timestamp(val, eachformat[4:])
-                elif eachformat.startswith("FILE:"):
-                    val = file_timestamp(val,eachformat[5:])
-                elif eachformat.lower() == "lookup_id":
-                    val = id_table[val]
-                elif eachformat.lower() == "md5":
-                    val = hashlib.md5(str(val)).hexdigest()
-                elif eachformat.lower() == "sha1":
-                    val = hashlib.sha1(str(val)).hexdigest()
-                elif eachformat.lower() == "sha256":
-                    val = hashlib.sha256(str(val)).hexdigest()
-                elif eachformat.lower() == "base16":
-                    if type(val)=="<type 'int'>":
-                        val = hex(val)
-                    else:
-                        val = str(val).encode("hex")
-                elif eachformat.lower() == "base2":
-                    if type(val)==int:
-                        val = bin(val)
-                    else:
-                        try:
-                            val = int(str(val),2)
-                        except :
-                            val = "Warning: Unable to convert value %s to binary." % (val)
-                elif eachformat.lower() == "interface_id" and options.reghive:
-                    val = interface_table.get(str(val),"")
-                elif eachformat.lower() == "interface_id" and not options.reghive:
-                    val = "WARNING: Ignoring interface_id format command because the --REG_HIVE was not specified."
                 else:
-                    val =  "WARNING: I'm not sure what to do with the format command %s.  It was ignored." % (eachformat)
+                    val = format_output(val, eachformat)
             new_cell = WriteOnlyCell(xls_sheet, value=val)
             new_cell.style = eachstyle
             #print dir(new_cell.style.font)

@@ -33,3 +33,30 @@ optional arguments:
                         network profiles will be resolved.
   --quiet, -q           Supress unneeded output messages.
 
+
+
+TEMPLATE FILE FORMAT:
+A template file has multiple tabs.  Each tab is associated with a different table in the SRUM (or any ESE databaes).  On each tab in the template you put the following data:
+
+Cell A1 = The name of the table inside the SRUM database
+ROW  B  = The names of the fields (one per column) to extract from that table.  The field name #XLS_COLUMN# may also be included in this row if you want to have a calculated excel column as part of the output.  If the field name is #XLS_COLUMN# then the format field information will be placed in the output columm.  The string #ROW_NUM# can be used in the calculations to have a relative reference to the current row in the database.  Note the the formatting (fonts, borders, background fill, etc) of this row is applied to each row in the resulting output file.
+ROW C  = Format commands to change that tell SRUM_DUMP how to interpret the data in that field.   Valid format commands include:
+    OLE:[TimeDate Format String] Example: OLE:%Y-%m-%d %H:%M:%S This interprets the column data as a Windows OLE Date Time stamp
+    FILE:[TimeDate Format String] Example: FILE:%Y-%m-%d %H:%M:%S This interprets the column data as a Windows File System Date Time stamp
+    base16 (convert database field to hex)
+    base2 (to binary)
+    md5 (calucale a hash of the data)
+    sha1 (calucale a hash of the data)
+    sha256 (calucale a hash of the data)
+ROW D  = Human Readable column names for the associated fields.  The contents of this row including its formatting will be come the columm headers in your resulting output xls file.
+
+See the SRUM_TEMPLATE.XLSX for an example.  Check out ESE_ANALYST from http://github.com/MarkBaggett/ for more details.
+
+
+
+
+
+
+
+
+
