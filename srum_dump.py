@@ -6,10 +6,10 @@ import struct
 import re
 import openpyxl
 from openpyxl.writer.write_only import WriteOnlyCell
+from openpyxl.comments import Comment
 import argparse
 import warnings
 import hashlib
-import random
 
 def BinarySIDtoStringSID(sid):
   #Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
@@ -54,17 +54,17 @@ def BinarySIDtoStringSID(sid):
       start += 4
   return "S-%s" % ("-".join([str(x) for x in str_sid_components]))
 
-def ole_timestamp(binblob,timeformat="%Y-%m-%d %H:%M:%S"):
+def ole_timestamp(binblob):
     #converts a hex encoded OLE time stamp to a time string
     ts = struct.unpack(">d",struct.pack(">Q",binblob))[0]
     dt = datetime(1899,12,30,0,0,0) + timedelta(days=ts)
-    return  dt.strftime(timeformat)
-
-def file_timestamp(binblob,timeformat="%Y-%m-%d %H:%M:%S"):
+    return dt
+ 
+def file_timestamp(binblob):
     #converts a hex encoded windows file time stamp to a time string
     dt = datetime(1601,1,1,0,0,0) + timedelta(microseconds=binblob/10)
-    return  dt.strftime(timeformat)
-
+    return dt
+ 
 def load_interfaces(reg_file):
     from Registry import Registry
     try:
@@ -116,17 +116,30 @@ def abort(error_code):
         raw_input("Press enter to exit")
     sys.exit(error_code)
 
-def format_output(val,eachformat):
+def format_output(val,eachformat, eachstyle):
+    "Returns a excel cell with the data formated as specified"
+    new_cell = WriteOnlyCell(xls_sheet, value = "init")
+    new_cell.style = eachstyle
     if val==None:
         val="None"
     elif eachformat == None:
         pass
+    elif eachformat == "OLE":
+        val = ole_timestamp(val)
+        new_cell.number_format = 'YYYY MMM DD'
     elif eachformat.startswith("OLE:"):
-        val = ole_timestamp(val, eachformat[4:])
+        val = ole_timestamp(val)
+        val = val.strftime(eachformat[4:])
+    elif eachformat=="FILE":
+        val = file_timestamp(val)
+        new_cell.number_format = 'YYYY MMM DD'
     elif eachformat.startswith("FILE:"):
-        val = file_timestamp(val,eachformat[5:])
+        val = file_timestamp(val)
+        val = val.strftime(eachformat[5:])
     elif eachformat.lower() == "lookup_id":
         val = id_table[val]
+    elif eachformat.lower() == "lookup_luid":
+        val = lookup_luid(val)
     elif eachformat.lower() == "md5":
         val = hashlib.md5(str(val)).hexdigest()
     elif eachformat.lower() == "sha1":
@@ -145,14 +158,18 @@ def format_output(val,eachformat):
             try:
                 val = int(str(val),2)
             except :
-                val = "Warning: Unable to convert value %s to binary." % (val)
+                val = val
+                new_cell.comment = Comment("Warning: Unable to convert value %s to binary." % (val),"srum_dump")
     elif eachformat.lower() == "interface_id" and options.reghive:
         val = interface_table.get(str(val),"")
     elif eachformat.lower() == "interface_id" and not options.reghive:
-        val = "WARNING: Ignoring interface_id format command because the --REG_HIVE was not specified."
+        val = val
+        new_cell.comment = Comment("WARNING: Ignoring interface_id format command because the --REG_HIVE was not specified.", "srum_dump")
     else:
-        val =  "WARNING: I'm not sure what to do with the format command %s.  It was ignored." % (eachformat)    
-    return val
+        val = val
+        new_cell.comment =  Comment("WARNING: I'm not sure what to do with the format command %s.  It was ignored." % (eachformat), "srum_dump")  
+    new_cell.value = val  
+    return new_cell
 
 def rotating_list(somelist):
     while True:
@@ -167,6 +184,11 @@ ads = rotating_list(["Mark Baggett and Don Williams wrote the first working copy
        "This program was written by Twitter:@markbaggett and @donaldjwilliam5 because @ovie said so.",
        "You could analyze other ESE format databases with ese_analyst.  https://github.com/MarkBaggett/ese-analyst",
        ])
+
+def lookup_luid(luidval):
+    LUID_interface_types = {'133': 'IF_TYPE_CES', '132': 'IF_TYPE_COFFEE', '131': 'IF_TYPE_TUNNEL', '130': 'IF_TYPE_A12MPPSWITCH', '137': 'IF_TYPE_L3_IPXVLAN', '136': 'IF_TYPE_L3_IPVLAN', '135': 'IF_TYPE_L2_VLAN', '134': 'IF_TYPE_ATM_SUBINTERFACE', '139': 'IF_TYPE_MEDIAMAILOVERIP', '138': 'IF_TYPE_DIGITALPOWERLINE', '24': 'IF_TYPE_SOFTWARE_LOOPBACK', '25': 'IF_TYPE_EON', '26': 'IF_TYPE_ETHERNET_3MBIT', '27': 'IF_TYPE_NSIP', '20': 'IF_TYPE_BASIC_ISDN', '21': 'IF_TYPE_PRIMARY_ISDN', '22': 'IF_TYPE_PROP_POINT2POINT_SERIAL', '23': 'IF_TYPE_PPP', '28': 'IF_TYPE_SLIP', '29': 'IF_TYPE_ULTRA', '4': 'IF_TYPE_DDN_X25', '8': 'IF_TYPE_ISO88024_TOKENBUS', '119': 'IF_TYPE_LAP_F', '120': 'IF_TYPE_V37', '121': 'IF_TYPE_X25_MLP', '122': 'IF_TYPE_X25_HUNTGROUP', '123': 'IF_TYPE_TRANSPHDLC', '124': 'IF_TYPE_INTERLEAVE', '125': 'IF_TYPE_FAST', '126': 'IF_TYPE_IP', '127': 'IF_TYPE_DOCSCABLE_MACLAYER', '128': 'IF_TYPE_DOCSCABLE_DOWNSTREAM', '129': 'IF_TYPE_DOCSCABLE_UPSTREAM', '118': 'IF_TYPE_HDLC', '59': 'IF_TYPE_AFLANE_8023', '58': 'IF_TYPE_FRAMERELAY_INTERCONNECT', '55': 'IF_TYPE_IEEE80212', '54': 'IF_TYPE_PROP_MULTIPLEXOR', '57': 'IF_TYPE_HIPPIINTERFACE', '56': 'IF_TYPE_FIBRECHANNEL', '51': 'IF_TYPE_SONET_VT', '50': 'IF_TYPE_SONET_PATH', '53': 'IF_TYPE_PROP_VIRTUAL', '52': 'IF_TYPE_SMDS_ICIP', '115': 'IF_TYPE_ISO88025_FIBER', '114': 'IF_TYPE_IPOVER_ATM', '88': 'IF_TYPE_ARAP', '89': 'IF_TYPE_PROP_CNLS', '111': 'IF_TYPE_STACKTOSTACK', '110': 'IF_TYPE_IPOVER_CLAW', '113': 'IF_TYPE_MPC', '112': 'IF_TYPE_VIRTUALIPADDRESS', '82': 'IF_TYPE_DS0_BUNDLE', '83': 'IF_TYPE_BSC', '80': 'IF_TYPE_ATM_LOGICAL', '81': 'IF_TYPE_DS0', '86': 'IF_TYPE_ISO88025R_DTR', '87': 'IF_TYPE_EPLRS', '84': 'IF_TYPE_ASYNC', '85': 'IF_TYPE_CNR', '3': 'IF_TYPE_HDH_1822', '7': 'IF_TYPE_IS088023_CSMACD', '108': 'IF_TYPE_PPPMULTILINKBUNDLE', '109': 'IF_TYPE_IPOVER_CDLC', '102': 'IF_TYPE_VOICE_FXS', '103': 'IF_TYPE_VOICE_ENCAP', '100': 'IF_TYPE_VOICE_EM', '101': 'IF_TYPE_VOICE_FXO', '106': 'IF_TYPE_ATM_FUNI', '107': 'IF_TYPE_ATM_IMA', '104': 'IF_TYPE_VOICE_OVERIP', '105': 'IF_TYPE_ATM_DXI', '39': 'IF_TYPE_SONET', '38': 'IF_TYPE_MIO_X25', '33': 'IF_TYPE_RS232', '32': 'IF_TYPE_FRAMERELAY', '31': 'IF_TYPE_SIP', '30': 'IF_TYPE_DS3', '37': 'IF_TYPE_ATM', '36': 'IF_TYPE_ARCNET_PLUS', '35': 'IF_TYPE_ARCNET', '34': 'IF_TYPE_PARA', '60': 'IF_TYPE_AFLANE_8025', '61': 'IF_TYPE_CCTEMUL', '62': 'IF_TYPE_FASTETHER', '63': 'IF_TYPE_ISDN', '64': 'IF_TYPE_V11', '65': 'IF_TYPE_V36', '66': 'IF_TYPE_G703_64K', '67': 'IF_TYPE_G703_2MB', '68': 'IF_TYPE_QLLC', '69': 'IF_TYPE_FASTETHER_FX', '2': 'IF_TYPE_REGULAR_1822', '6': 'IF_TYPE_ETHERNET_CSMACD', '99': 'IF_TYPE_MYRINET', '98': 'IF_TYPE_ISO88025_CRFPRINT', '91': 'IF_TYPE_TERMPAD', '90': 'IF_TYPE_HOSTPAD', '93': 'IF_TYPE_X213', '92': 'IF_TYPE_FRAMERELAY_MPI', '95': 'IF_TYPE_RADSL', '94': 'IF_TYPE_ADSL', '97': 'IF_TYPE_VDSL', '96': 'IF_TYPE_SDSL', '11': 'IF_TYPE_STARLAN', '10': 'IF_TYPE_ISO88026_MAN', '13': 'IF_TYPE_PROTEON_80MBIT', '12': 'IF_TYPE_PROTEON_10MBIT', '15': 'IF_TYPE_FDDI', '14': 'IF_TYPE_HYPERCHANNEL', '17': 'IF_TYPE_SDLC', '16': 'IF_TYPE_LAP_B', '19': 'IF_TYPE_E1', '18': 'IF_TYPE_DS1', '117': 'IF_TYPE_GIGABITETHERNET', '116': 'IF_TYPE_TDLC', '48': 'IF_TYPE_MODEM', '49': 'IF_TYPE_AAL5', '46': 'IF_TYPE_HSSI', '47': 'IF_TYPE_HIPPI', '44': 'IF_TYPE_FRAMERELAY_SERVICE', '45': 'IF_TYPE_V35', '42': 'IF_TYPE_LOCALTALK', '43': 'IF_TYPE_SMDS_DXI', '40': 'IF_TYPE_X25_PLE', '41': 'IF_TYPE_ISO88022_LLC', '1': 'IF_TYPE_OTHER', '5': 'IF_TYPE_RFC877_X25', '9': 'IF_TYPE_ISO88025_TOKENRING', '144': 'IF_TYPE_IEEE1394', '145': 'IF_TYPE_RECEIVE_ONLY', '142': 'IF_TYPE_IPFORWARD', '143': 'IF_TYPE_MSDSL', '140': 'IF_TYPE_DTM', '141': 'IF_TYPE_DCN', '77': 'IF_TYPE_LAP_D', '76': 'IF_TYPE_ISDN_U', '75': 'IF_TYPE_ISDN_S', '74': 'IF_TYPE_DLSW', '73': 'IF_TYPE_ESCON', '72': 'IF_TYPE_IBM370PARCHAN', '71': 'IF_TYPE_IEEE80211', '70': 'IF_TYPE_CHANNEL', '79': 'IF_TYPE_RSRB', '78': 'IF_TYPE_IPSWITCH'}
+    inttype = struct.unpack(">H6B",format(luidval, '016x').decode("hex"))[0]
+    return LUID_interface_types.get(str(inttype),'Unknown Interface type')
 
 parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
 parser.add_argument("--ESE_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
@@ -238,7 +260,7 @@ for each_sheet in sheets:
         field_name = template_sheet.cell(row = 2, column = eachcolumn).value
         if field_name == None:
             break
-        field_style = template_sheet.cell(row = 2, column = eachcolumn).style 
+        field_style = template_sheet.cell(row = 2, column = eachcolumn)
         format_cmd = template_sheet.cell(row = 3, column = eachcolumn).value
         ese_template_formats.append(format_cmd)
         ese_template_styles.append(field_style)
@@ -281,16 +303,19 @@ for each_sheet in sheets:
         for eachcolumn,eachformat,eachstyle in zip(ese_template_fields,ese_template_formats,ese_template_styles):
             if eachcolumn == "#XLS_COLUMN#":
                 val = eachformat.replace("#ROW_NUM#", str(row_num))
+                val = WriteOnlyCell(xls_sheet, value=val)
+                val.style = eachstyle.style
+                val.number_format = eachstyle.number_format
             else:
                 val = ese_row.get(eachcolumn,"UNABLETORETRIEVECOLUMN")
                 if val=="UNABLETORETRIEVECOLUMN":
                     val = "WARNING: Invalid Column Name " + eachcolumn+ " - Try one of these:"+str(ese_template_fields) + str(eachcolumn in ese_template_fields)
+                    val = WriteOnlyCell(xls_sheet, value=val)
+                    val.style = eachstyle
                 else:
-                    val = format_output(val, eachformat)
-            new_cell = WriteOnlyCell(xls_sheet, value=val)
-            new_cell.style = eachstyle
+                    val = format_output(val, eachformat,eachstyle.style)
             #print dir(new_cell.style.font)
-            xls_row.append(new_cell)
+            xls_row.append(val)
         xls_sheet.append(xls_row)
 
 firstsheet=target_wb.get_sheet_by_name("Sheet")
