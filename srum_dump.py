@@ -71,9 +71,14 @@ def load_interfaces(reg_file):
         reg_handle = Registry.Registry(reg_file)
     except Exception as e:
         print "I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one."
-        print "Error : ", str(e)
-        abort(1)
-    int_keys = reg_handle.open('Microsoft\\WlanSvc\\Interfaces')
+        print "WARNING : ", str(e)
+        return {}
+    try:
+        int_keys = reg_handle.open('Microsoft\\WlanSvc\\Interfaces')
+    except Exception as e:
+        print "There doesn't appear to be any wireless interfaces in this registry file."
+        print "WARNING : ", str(e)
+        return {}
     profile_lookup = {}
     for eachinterface in int_keys.subkeys():
         if len(eachinterface.subkeys())==0:
@@ -91,9 +96,18 @@ def load_interfaces(reg_file):
 
 def load_lookups(database):
     id_lookup = {}
-    lookup_table = database.openTable('SruDbIdMapTable')
+    try:
+        lookup_table = database.openTable('SruDbIdMapTable')
+    except Exception as e:
+        print "Unable to open the ID Lookup table.  Error :", str(e)
+        abort(1)
     while True:
-        rec_entry = database.getNextRow(lookup_table)
+        try:
+            rec_entry = database.getNextRow(lookup_table)
+        except Exception as e:
+            print "Skipping a corrupt record in SruDbIdMapTable."
+            print "Error :", str(e)
+            continue
         if rec_entry == None:
             return id_lookup
         if rec_entry['IdType']==0:
@@ -107,7 +121,7 @@ def load_lookups(database):
             user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
             id_lookup[rec_entry['IdIndex']] = user_blob
         else:
-            print "unknown entry type in IdMapTable"
+            print "WARNING: Unknown entry type in IdMapTable"
             #print rec_entry
     return id_lookup
 
@@ -176,7 +190,7 @@ def rotating_list(somelist):
         for x in somelist:
            yield x
           
-ads = rotating_list(["Mark Baggett and Don Williams wrote the first working copy of this program in less than 1 days. Coding in Python is easy.   Check out SANS Automating Infosec with Python SEC573 to learn to write program like this on your own.",
+ads = rotating_list(["Mark Baggett and Don Williams wrote the first working copy of this program in less than 1 day. Coding in Python is easy.   Check out SANS Automating Infosec with Python SEC573 to learn to write program like this on your own.",
        "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensics FOR408",
        "This program uses the function BinarySIDtoStringSID from the GRR code base to convert binary data into a user SID and relies heavily on the CoreSecurity Impacket ESE module. This works because of them.  Check them out!",
        "Yogesh Khatri's paper at https://files.sans.org/summit/Digital_Forensics_and_Incident_Response_Summit_2015/PDFs/Windows8SRUMForensicsYogeshKhatri.pdf was essential in the creation of this tool.",
@@ -191,7 +205,7 @@ def lookup_luid(luidval):
     return LUID_interface_types.get(str(inttype),'Unknown Interface type')
 
 parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
-parser.add_argument("--ESE_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
+parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
 parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create templates with ese_template.py.")
 parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
@@ -200,9 +214,9 @@ parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",
 options = parser.parse_args()
 
 interactive_mode = False
-if not options.ESE_INFILE:
+if not options.SRUM_INFILE:
     interactive_mode = True
-    options.ESE_INFILE = raw_input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
+    options.SRUM_INFILE = raw_input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
     options.XLSX_OUTFILE = raw_input(r"What is my output file name (Press enter for the default SRUM_DUMP_OUTPUT.xlsx) (Ex: \users\me\Desktop\resultx.xlsx) : ")
     options.XLSX_TEMPLATE = raw_input("What XLS Template should I use? (Press enter for the default SRUM_TEMPLATE.XLSX) : ")
     options.reghive = raw_input("What is the full path of the SOFTWARE registry hive? Usually \image-mount-point\Windows\System32\config\SOFTWARE (or press enter to skip Network resolution) : ")
@@ -213,8 +227,8 @@ if not options.XLSX_TEMPLATE:
 if not options.XLSX_OUTFILE:
     options.XLSX_OUTFILE = "SRUM_DUMP_OUTPUT.xlsx"
 
-if not os.path.exists(options.ESE_INFILE):
-    print "ESE File Not found: "+options.ESE_INFILE
+if not os.path.exists(options.SRUM_INFILE):
+    print "ESE File Not found: "+options.SRUM_INFILE
     abort(1)
 
 if not os.path.exists(options.XLSX_TEMPLATE):
@@ -230,7 +244,7 @@ if options.reghive:
 
 try:
     warnings.simplefilter("ignore")
-    ese_db = ese.ESENT_DB(options.ESE_INFILE)
+    ese_db = ese.ESENT_DB(options.SRUM_INFILE)
 except Exception as e:
     print "I could not open the specified SRUM file. Check your path and file name."
     print "Error : ", str(e)
@@ -251,6 +265,16 @@ for each_sheet in sheets:
     template_sheet = template_wb.get_sheet_by_name(each_sheet)
     #retieve the name of the ESE table to populate the sheet with from A1
     ese_template_table = template_sheet.cell("A1").value
+    #if the table name is #XLS_CONSTANTS# then just copy the entire sheet to the target workbook
+    if ese_template_table == "#XLS_CONSTANTS#":
+        xls_sheet = target_wb.create_sheet(title=each_sheet)
+        for row_num in range(1,template_sheet.max_row+1):
+            for col_num in range(1, template_sheet.max_column+1):
+                try:
+                    xls_sheet.cell(row=row_num, column=col_num).value = template_sheet.cell(row = row_num, column=col_num).value
+                except:
+                    pass
+        continue
     #retrieve the names of the ESE table columns and cell styles from row 2 and format commands from row 3 
     ese_template_fields = []
     ese_template_formats = []
@@ -269,7 +293,7 @@ for each_sheet in sheets:
     ese_table = ese_db.openTable(ese_template_table)
     #If the table is not found it returns None
     if not ese_table:
-        print "Unable to find table",ese_template_table
+        print "Unable to find table",each_sheet, ese_template_table
         continue
 
     #Now create the worksheet in the new xls file with the same name as the template
@@ -294,7 +318,11 @@ for each_sheet in sheets:
     #Until we get an empty row retrieve the rows from the ESE table and process them
     row_num = 1 #Init to 1, first row will be 2 in spreadsheet (1 is headers)
     while True:
-        ese_row = ese_db.getNextRow(ese_table)
+        try:
+            ese_row = ese_db.getNextRow(ese_table)
+        except Exception as e:
+            print "Skipping corrupt row in the %s table.  The last good row was %s." % (each_sheet, row_num)
+            continue
         if ese_row == None:
             break
         #The row is retrieved now use the template to figure out which ones you want and format them
