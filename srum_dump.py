@@ -61,7 +61,7 @@ def BinarySIDtoStringSID(sid):
       str_sid_components.append(struct.unpack("<L", authority)[0])
       start += 4
       sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
-      return lookup_sid(sid_str)
+  return lookup_sid(sid_str)
 
 def ole_timestamp(binblob):
     #converts a hex encoded OLE time stamp to a time string
