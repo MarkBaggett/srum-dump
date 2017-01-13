@@ -1,0 +1,3 @@
+hexdump
+argparse
+impacket
