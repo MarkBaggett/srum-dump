@@ -5,7 +5,6 @@ import struct
 import logging
 import datetime
 
-import hexdump
 import argparse
 from impacket import ese
 
@@ -348,7 +347,6 @@ def parse_file_timestamp(n):
 
 
 def parse_binary(hx):
-    #return hexdump.hexdump(hx.decode('hex'), result='return')
     return hx
 
 
@@ -444,4 +442,3 @@ def main(argv):
 
 if __name__ == '__main__':
     sys.exit(main(sys.argv[:]))
-    print(1)
