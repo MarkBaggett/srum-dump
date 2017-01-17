@@ -327,6 +327,9 @@ TABLE_NAMES = {
 
 
 def get_srum_tables(ese_db):
+    # danger: hacks abound here:
+    #  - we shouldn't reach directly into the ese database object, but its the only easy way to get table names.
+    #  - we assume the interesting srum tables are named as guids, yolo.
     for tablename in ese_db._ESENT_DB__tables.keys():
         if tablename.startswith('{'):
             yield tablename
