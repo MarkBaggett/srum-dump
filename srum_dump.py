@@ -265,7 +265,7 @@ except Exception as e:
     abort(1)
 
 try:
-    template_wb = openpyxl.load_workbook(filename=options.XLSX_TEMPLATE, read_only=True)
+    template_wb = openpyxl.load_workbook(filename=options.XLSX_TEMPLATE)
 except Exception as e:
     print "I could not open the specified template file %s. Check your path and file name." % (options.XLSX_TEMPLATE)
     print "Error : ", str(e)
