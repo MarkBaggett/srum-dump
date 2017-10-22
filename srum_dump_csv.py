@@ -266,6 +266,8 @@ parser = argparse.ArgumentParser(description="Given an SRUM database it will cre
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create templates with ese_template.py.")
 parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
+parser.add_argument("--OUT_PATH", "-o", dest="outdir", help = "The directory to which you want to write the CSVs containing the data.")
+
 parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
 
 options = parser.parse_args()
@@ -275,22 +277,33 @@ if not options.SRUM_INFILE:
     interactive_mode = True
     options.SRUM_INFILE = raw_input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
     options.XLSX_TEMPLATE = raw_input("What XLS Template should I use? (Press enter for the default SRUM_TEMPLATE.XLSX) : ")
+    options.OUT_PATH = raw_input("What directory would you would like to write the CSV files to? (Press enter for the current directory) : ")
     options.reghive = raw_input("What is the full path of the SOFTWARE registry hive? Usually \image-mount-point\Windows\System32\config\SOFTWARE (or press enter to skip Network resolution) : ")
 
 if not options.XLSX_TEMPLATE:
     options.XLSX_TEMPLATE = "SRUM_TEMPLATE.xlsx"
 
+options.SRUM_INFILE = os.path.abspath(options.SRUM_INFILE)
 if not os.path.exists(options.SRUM_INFILE):
     print "ESE File Not found: "+options.SRUM_INFILE
     abort(1)
 
+options.OUT_PATH = os.path.abspath(options.OUT_PATH)
+if not os.path.exists(options.OUT_PATH):
+    print "The output directory doesn't exists: "+options.OUT_PATH
+    abort(1)
+
+
+options.XLSX_TEMPLATE = os.path.abspath(options.XLSX_TEMPLATE)
 if not os.path.exists(options.XLSX_TEMPLATE):
     print "Template File Not found: "+options.XLSX_TEMPLATE
     abort(1)
 
-if options.reghive and not os.path.exists(options.reghive):
-    print "Registry File Not found: "+options.reghive
-    abort(1)
+if options.reghive:
+    options.reghive = os.path.exists(options.reghive)
+    if not os.path.exists(options.reghive):
+        print "Registry File Not found: "+options.reghive
+        abort(1)
 
 if options.reghive:
     interface_table = load_interfaces(options.reghive)
