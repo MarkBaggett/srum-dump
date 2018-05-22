@@ -191,7 +191,11 @@ def load_lookups(database):
         elif rec_entry['IdType']==2:
             id_lookup[rec_entry['IdIndex']] = unicode(rec_entry['IdBlob'].decode("hex"),'utf-16-le').strip("\x00")
         elif rec_entry['IdType']==3:
-            user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
+            try:
+                user_blob = BinarySIDtoStrSID(rec_entry['IdBlob'].decode("hex"))
+            except:
+                user_blob = 'None'
+            #user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
             id_lookup[rec_entry['IdIndex']] = user_blob
         else:
             print "WARNING: Unknown entry type in IdMapTable"
@@ -266,8 +270,6 @@ parser = argparse.ArgumentParser(description="Given an SRUM database it will cre
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create templates with ese_template.py.")
 parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
-parser.add_argument("--OUT_PATH", "-o", dest="outdir", help = "The directory to which you want to write the CSVs containing the data.")
-
 parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
 
 options = parser.parse_args()
@@ -277,7 +279,6 @@ if not options.SRUM_INFILE:
     interactive_mode = True
     options.SRUM_INFILE = raw_input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
     options.XLSX_TEMPLATE = raw_input("What XLS Template should I use? (Press enter for the default SRUM_TEMPLATE.XLSX) : ")
-    options.OUT_PATH = raw_input("What directory would you would like to write the CSV files to? (Press enter for the current directory) : ")
     options.reghive = raw_input("What is the full path of the SOFTWARE registry hive? Usually \image-mount-point\Windows\System32\config\SOFTWARE (or press enter to skip Network resolution) : ")
 
 if not options.XLSX_TEMPLATE:
@@ -287,12 +288,6 @@ options.SRUM_INFILE = os.path.abspath(options.SRUM_INFILE)
 if not os.path.exists(options.SRUM_INFILE):
     print "ESE File Not found: "+options.SRUM_INFILE
     abort(1)
-
-options.OUT_PATH = os.path.abspath(options.OUT_PATH)
-if not os.path.exists(options.OUT_PATH):
-    print "The output directory doesn't exists: "+options.OUT_PATH
-    abort(1)
-
 
 options.XLSX_TEMPLATE = os.path.abspath(options.XLSX_TEMPLATE)
 if not os.path.exists(options.XLSX_TEMPLATE):
@@ -363,9 +358,12 @@ for each_sheet in sheets:
             ad = "Thanks for using srum_dump!"
     print "While you wait, did you know ...\n"+ad+"\n"
 
- 
-    csvfile = open("srum{0}.csv".format(each_sheet.replace(" ","")), "wb")
-    csv_writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    try:
+        csvfile = open("srum{0}.csv".format(each_sheet.replace(" ","")), "wb")
+        csv_writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
+    except Exception as e:
+        print("An Error Occured while attempting to create the CSV file. {0}".format(str(e)))
+        abort(1)
 
     #Now copy the header values and header formats from the template to the new worksheet
     header_row = []

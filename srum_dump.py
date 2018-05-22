@@ -127,7 +127,11 @@ def load_lookups(database):
         elif rec_entry['IdType']==2:
             id_lookup[rec_entry['IdIndex']] = unicode(rec_entry['IdBlob'].decode("hex"),'utf-16-le').strip("\x00")
         elif rec_entry['IdType']==3:
-            user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
+            try:
+                user_blob = BinarySIDtoStrSID(rec_entry['IdBlob'].decode("hex"))
+            except:
+                user_blob = 'None'
+            #user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
             id_lookup[rec_entry['IdIndex']] = user_blob
         else:
             print "WARNING: Unknown entry type in IdMapTable"

@@ -1,5 +1,7 @@
 # srum-dump
 
+There are two versions of this program.  SRUM_DUMP and SRUM_DUMP_CSV.   If the database contains more information that are currently supported by the XLSX modules I am using then SRUM_DUMP will not be able to create the output file.  If you have errors when using SRUM_DUMP then use SRUM_DUMP_CSV.  It will create smaller CSV files instead of one large spreadsheet.
+
 This program will create an excel spreadsheet containing forensics artifacts contained the SRUM (System Resource Utilization Manager) database.
 
 The program can be run with no input and it will prompt you for each of the needed arguments. The program requires two inputs. The first is an SRUM database. The SRUM database is usually \Windows\system32\sru\SRUDB.dat. The second is a XLSX template file that contains the names of the tables and fields that you want to extract from the SRUM database. SRUM_TEMPLATE.xlsx is distributed with the program and it includes the fields that you will most likely be interested in.  If you want to add additinal XLS calculations or remove fields form the SRUM database you can make a copy of SRUM_TEMPLATE.xlsx and change that template file as needed. The program will create a new XLSX file containing the fields specified inside the template.
