@@ -128,7 +128,7 @@ def load_lookups(database):
             id_lookup[rec_entry['IdIndex']] = unicode(rec_entry['IdBlob'].decode("hex"),'utf-16-le').strip("\x00")
         elif rec_entry['IdType']==3:
             try:
-                user_blob = BinarySIDtoStrSID(rec_entry['IdBlob'].decode("hex"))
+                user_blob = BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
             except:
                 user_blob = 'None'
             #user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
