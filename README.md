@@ -1,10 +1,9 @@
 This is a Python3 port of SRUM_DUMP.py and SRUM_DUMP_CSV.py
-
+```
 To INSTALL:
-
 git clone --branch python3 http://github.com/markbaggett/srum-dump
 cd srum-dump
-python3 -m pip install -r requirements.txt
+sudo -H python3 -m pip install -r requirements.txt
 
 
 To RUN
@@ -12,7 +11,7 @@ python3 srum_dump.py
 
 or
 python3 srum_dump_csv.py
-
+```
     
 
 
