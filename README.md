@@ -1,3 +1,24 @@
+This is a Python3 port of SRUM_DUMP.py and SRUM_DUMP_CSV.py
+
+To INSTALL:
+
+git clone --branch python3 http://github.com/markbaggett/srum-dump
+cd srum-dump
+python3 -m pip install -r requirements.txt
+
+
+To RUN
+python3 srum_dump.py
+
+or
+python3 srum_dump_csv.py
+
+    
+
+
+Original README:
+
+
 # srum-dump
 
 There are two versions of this program.  SRUM_DUMP and SRUM_DUMP_CSV.   If the database contains more information that are currently supported by the XLSX modules I am using then SRUM_DUMP will not be able to create the output file.  If you have errors when using SRUM_DUMP then use SRUM_DUMP_CSV.  It will create smaller CSV files instead of one large spreadsheet.

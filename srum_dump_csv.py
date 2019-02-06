@@ -1,4 +1,5 @@
-#
+#! /usr/bin/env python3
+
 # SRUM DUMP that uses different ESE module and only dumps CSVs.  Some large
 # SRUM files crashed the XLSX module.
 #
@@ -15,6 +16,7 @@ import warnings
 import hashlib
 from copy import copy
 import csv
+import codecs
 
 
 def lookup_sid(sid):
@@ -27,56 +29,54 @@ def lookup_sid(sid):
 
 
 def BinarySIDtoStringSID(sid):
-    """ Given a SID Binary blob returns a string."""
-    # Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
-    """Converts a binary SID to its string representation.
-    https://msdn.microsoft.com/en-us/library/windows/desktop/aa379597.aspx
-    The byte representation of an SID is as follows:
-        Offset  Length  Description
-        00      01      revision
-        01      01      sub-authority count
-        02      06      authority (big endian)
-        08      04      subauthority #1 (little endian)
-        0b      04      subauthority #2 (little endian)
-        ...
-      Args:
-        sid: A byte array.
-      Returns:
-        SID in string form.
-      Raises:
-        ValueError: If the binary SID is malformed.
-    """
-    if not sid:
-        return ""
-    str_sid_components = [ord(sid[0])]
-    # Now decode the 48-byte portion
-    if len(sid) >= 8:
-        subauthority_count = ord(sid[1])
-        identifier_authority = struct.unpack(">H", sid[2:4])[0]
-        identifier_authority <<= 32
-        identifier_authority |= struct.unpack(">L", sid[4:8])[0]
-        str_sid_components.append(identifier_authority)
-        start = 8
-        for i in range(subauthority_count):
-            authority = sid[start:start + 4]
-            if not authority:
-                break
-            if len(authority) < 4:
-                raise ValueError("In binary SID '%s', component %d has been truncated. "
-                    "Expected 4 bytes, found %d: (%s)",
-                    ",".join([str(ord(c)) for c in sid]), i,
-                    len(authority), authority)
-            str_sid_components.append(struct.unpack("<L", authority)[0])
-            start += 4
-            sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
-        return lookup_sid(sid_str)
-
+  #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
+  """Converts a binary SID to its string representation.
+  https://msdn.microsoft.com/en-us/library/windows/desktop/aa379597.aspx
+  The byte representation of an SID is as follows:
+    Offset  Length  Description
+    00      01      revision
+    01      01      sub-authority count
+    02      06      authority (big endian)
+    08      04      subauthority #1 (little endian)
+    0b      04      subauthority #2 (little endian)
+    ...
+  Args:
+    sid: A byte array.
+  Returns:
+    SID in string form.
+  Raises:
+    ValueError: If the binary SID is malformed.
+  """
+  if not sid:
+    return ""
+  str_sid_components = [sid[0]]
+  # Now decode the 48-byte portion
+  if len(sid) >= 8:
+    subauthority_count = sid[1]
+    identifier_authority = struct.unpack(">H", sid[2:4])[0]
+    identifier_authority <<= 32
+    identifier_authority |= struct.unpack(">L", sid[4:8])[0]
+    str_sid_components.append(identifier_authority)
+    start = 8
+    for i in range(subauthority_count):
+      authority = sid[start:start + 4]
+      if not authority:
+        break
+      if len(authority) < 4:
+        raise ValueError("In binary SID '%s', component %d has been truncated. "
+                         "Expected 4 bytes, found %d: (%s)",
+                         ",".join([str(ord(c)) for c in sid]), i,
+                         len(authority), authority)
+      str_sid_components.append(struct.unpack("<L", authority)[0])
+      start += 4
+      sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
+  return lookup_sid(sid_str)
 def ole_timestamp(binblob,timeformat="%Y-%m-%d %H:%M:%S"):
     #converts a hex encoded OLE time stamp to a time string
     try:
         ts = struct.unpack("<d",binblob)[0]
     except:
-        print("Unable to unpack binblob {0}".format(str(binblob)))
+        print(("Unable to unpack binblob {0}".format(str(binblob))))
         ts = 2
     dt = datetime(1899, 12, 30, 0, 0, 0) + timedelta(days=ts)
     return  dt.strftime(timeformat)
@@ -127,13 +127,13 @@ def smart_retrieve(ese_table, ese_record_num, column_number):
     elif col_type == pyesedb.column_types.INTEGER_8BIT_UNSIGNED:
         col_data = 0 if not col_data else struct.unpack('B',col_data)[0]
     elif col_type == pyesedb.column_types.LARGE_BINARY_DATA:
-        col_data = "" if not col_data else col_data.encode("HEX")
+        col_data = "" if not col_data else col_data
     elif col_type == pyesedb.column_types.LARGE_TEXT:
         col_data = blob_to_string(col_data)
     elif col_type == pyesedb.column_types.NULL:
         pass
     elif col_type == pyesedb.column_types.SUPER_LARGE_VALUE:
-        col_data = "" if not col_data else col_data.encode("HEX")
+        col_data = "" if not col_data else col_data
     elif col_type == pyesedb.column_types.TEXT:
         col_data = blob_to_string(col_data)       
     if col_data==None:
@@ -145,22 +145,22 @@ def load_interfaces(reg_file):
     try:
         reg_handle = Registry.Registry(reg_file)
     except Exception as e:
-        print "I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one."
-        print "WARNING : ", str(e)
+        print("I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one.")
+        print("WARNING : ", str(e))
         return {}
     try:
         int_keys = reg_handle.open('Microsoft\\WlanSvc\\Interfaces')
     except Exception as e:
-        print "There doesn't appear to be any wireless interfaces in this registry file."
-        print "WARNING : ", str(e)
+        print("There doesn't appear to be any wireless interfaces in this registry file.")
+        print("WARNING : ", str(e))
         return {}
     profile_lookup = {}
     for eachinterface in int_keys.subkeys():
         if len(eachinterface.subkeys())==0:
             continue
         for eachprofile in eachinterface.subkey("Profiles").subkeys():
-            profileid = [x.value() for x in eachprofile.values() if x.name()=="ProfileIndex"][0]
-            metadata = eachprofile.subkey("MetaData").values()
+            profileid = [x.value() for x in list(eachprofile.values()) if x.name()=="ProfileIndex"][0]
+            metadata = list(eachprofile.subkey("MetaData").values())
             for eachvalue in metadata:
                 if eachvalue.name()=="Channel Hints":
                     channelhintraw = eachvalue.value()
@@ -169,12 +169,13 @@ def load_interfaces(reg_file):
                     profile_lookup[str(profileid)] = name
     return profile_lookup
 
+
 def load_lookups(database):
     id_lookup = {}
     try:
         lookup_table = database.get_table_by_name('SruDbIdMapTable')
     except Exception as e:
-        print "Unable to open the ID Lookup table.  Error :", str(e)
+        print( "Unable to open the ID Lookup table.  Error :", str(e))
         abort(1)
     for rec_entry in ese_getnextrow(lookup_table):
         #except Exception as e:
@@ -184,27 +185,29 @@ def load_lookups(database):
         if rec_entry == None:
             return id_lookup
         if rec_entry['IdType']==0:
-            proc_blob = 'None' if not rec_entry['IdBlob'] else unicode(rec_entry['IdBlob'].decode("hex"),'utf-16-le').strip("\x00")
+            proc_blob = 'None' if not rec_entry['IdBlob'] else rec_entry['IdBlob'].decode('utf-16-le').strip("\x00")
             id_lookup[rec_entry['IdIndex']] = proc_blob
         elif rec_entry['IdType']==1:
-            id_lookup[rec_entry['IdIndex']] = unicode(rec_entry['IdBlob'].decode("hex"),'utf-16-le').strip("\x00")
+            id_lookup[rec_entry['IdIndex']] = rec_entry['IdBlob'].decode('utf-16-le').strip("\x00")
         elif rec_entry['IdType']==2:
-            id_lookup[rec_entry['IdIndex']] = unicode(rec_entry['IdBlob'].decode("hex"),'utf-16-le').strip("\x00")
+            id_lookup[rec_entry['IdIndex']] = rec_entry['IdBlob'].decode('utf-16-le').strip("\x00")
         elif rec_entry['IdType']==3:
             try:
-                user_blob = BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
-            except:
+                user_blob = BinarySIDtoStringSID(rec_entry['IdBlob'])
+            except Exception as e:
+                print("User SID not found : {} {}".format(rec_entry, e))
                 user_blob = 'None'
             #user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
             id_lookup[rec_entry['IdIndex']] = user_blob
         else:
-            print "WARNING: Unknown entry type in IdMapTable"
+            print("WARNING: Unknown entry type in IdMapTable")
             #print rec_entry
     return id_lookup
 
+
 def abort(error_code):
     if interactive_mode:
-        raw_input("Press enter to exit")
+        input("Press enter to exit")
     sys.exit(error_code)
 
 def format_value(val, eachformat):
@@ -263,7 +266,7 @@ ads = rotating_list(["Check out SANS Automating Infosec with Python SEC573 to le
 
 def lookup_luid(luidval):
     LUID_interface_types = {'133': 'IF_TYPE_CES', '132': 'IF_TYPE_COFFEE', '131': 'IF_TYPE_TUNNEL', '130': 'IF_TYPE_A12MPPSWITCH', '137': 'IF_TYPE_L3_IPXVLAN', '136': 'IF_TYPE_L3_IPVLAN', '135': 'IF_TYPE_L2_VLAN', '134': 'IF_TYPE_ATM_SUBINTERFACE', '139': 'IF_TYPE_MEDIAMAILOVERIP', '138': 'IF_TYPE_DIGITALPOWERLINE', '24': 'IF_TYPE_SOFTWARE_LOOPBACK', '25': 'IF_TYPE_EON', '26': 'IF_TYPE_ETHERNET_3MBIT', '27': 'IF_TYPE_NSIP', '20': 'IF_TYPE_BASIC_ISDN', '21': 'IF_TYPE_PRIMARY_ISDN', '22': 'IF_TYPE_PROP_POINT2POINT_SERIAL', '23': 'IF_TYPE_PPP', '28': 'IF_TYPE_SLIP', '29': 'IF_TYPE_ULTRA', '4': 'IF_TYPE_DDN_X25', '8': 'IF_TYPE_ISO88024_TOKENBUS', '119': 'IF_TYPE_LAP_F', '120': 'IF_TYPE_V37', '121': 'IF_TYPE_X25_MLP', '122': 'IF_TYPE_X25_HUNTGROUP', '123': 'IF_TYPE_TRANSPHDLC', '124': 'IF_TYPE_INTERLEAVE', '125': 'IF_TYPE_FAST', '126': 'IF_TYPE_IP', '127': 'IF_TYPE_DOCSCABLE_MACLAYER', '128': 'IF_TYPE_DOCSCABLE_DOWNSTREAM', '129': 'IF_TYPE_DOCSCABLE_UPSTREAM', '118': 'IF_TYPE_HDLC', '59': 'IF_TYPE_AFLANE_8023', '58': 'IF_TYPE_FRAMERELAY_INTERCONNECT', '55': 'IF_TYPE_IEEE80212', '54': 'IF_TYPE_PROP_MULTIPLEXOR', '57': 'IF_TYPE_HIPPIINTERFACE', '56': 'IF_TYPE_FIBRECHANNEL', '51': 'IF_TYPE_SONET_VT', '50': 'IF_TYPE_SONET_PATH', '53': 'IF_TYPE_PROP_VIRTUAL', '52': 'IF_TYPE_SMDS_ICIP', '115': 'IF_TYPE_ISO88025_FIBER', '114': 'IF_TYPE_IPOVER_ATM', '88': 'IF_TYPE_ARAP', '89': 'IF_TYPE_PROP_CNLS', '111': 'IF_TYPE_STACKTOSTACK', '110': 'IF_TYPE_IPOVER_CLAW', '113': 'IF_TYPE_MPC', '112': 'IF_TYPE_VIRTUALIPADDRESS', '82': 'IF_TYPE_DS0_BUNDLE', '83': 'IF_TYPE_BSC', '80': 'IF_TYPE_ATM_LOGICAL', '81': 'IF_TYPE_DS0', '86': 'IF_TYPE_ISO88025R_DTR', '87': 'IF_TYPE_EPLRS', '84': 'IF_TYPE_ASYNC', '85': 'IF_TYPE_CNR', '3': 'IF_TYPE_HDH_1822', '7': 'IF_TYPE_IS088023_CSMACD', '108': 'IF_TYPE_PPPMULTILINKBUNDLE', '109': 'IF_TYPE_IPOVER_CDLC', '102': 'IF_TYPE_VOICE_FXS', '103': 'IF_TYPE_VOICE_ENCAP', '100': 'IF_TYPE_VOICE_EM', '101': 'IF_TYPE_VOICE_FXO', '106': 'IF_TYPE_ATM_FUNI', '107': 'IF_TYPE_ATM_IMA', '104': 'IF_TYPE_VOICE_OVERIP', '105': 'IF_TYPE_ATM_DXI', '39': 'IF_TYPE_SONET', '38': 'IF_TYPE_MIO_X25', '33': 'IF_TYPE_RS232', '32': 'IF_TYPE_FRAMERELAY', '31': 'IF_TYPE_SIP', '30': 'IF_TYPE_DS3', '37': 'IF_TYPE_ATM', '36': 'IF_TYPE_ARCNET_PLUS', '35': 'IF_TYPE_ARCNET', '34': 'IF_TYPE_PARA', '60': 'IF_TYPE_AFLANE_8025', '61': 'IF_TYPE_CCTEMUL', '62': 'IF_TYPE_FASTETHER', '63': 'IF_TYPE_ISDN', '64': 'IF_TYPE_V11', '65': 'IF_TYPE_V36', '66': 'IF_TYPE_G703_64K', '67': 'IF_TYPE_G703_2MB', '68': 'IF_TYPE_QLLC', '69': 'IF_TYPE_FASTETHER_FX', '2': 'IF_TYPE_REGULAR_1822', '6': 'IF_TYPE_ETHERNET_CSMACD', '99': 'IF_TYPE_MYRINET', '98': 'IF_TYPE_ISO88025_CRFPRINT', '91': 'IF_TYPE_TERMPAD', '90': 'IF_TYPE_HOSTPAD', '93': 'IF_TYPE_X213', '92': 'IF_TYPE_FRAMERELAY_MPI', '95': 'IF_TYPE_RADSL', '94': 'IF_TYPE_ADSL', '97': 'IF_TYPE_VDSL', '96': 'IF_TYPE_SDSL', '11': 'IF_TYPE_STARLAN', '10': 'IF_TYPE_ISO88026_MAN', '13': 'IF_TYPE_PROTEON_80MBIT', '12': 'IF_TYPE_PROTEON_10MBIT', '15': 'IF_TYPE_FDDI', '14': 'IF_TYPE_HYPERCHANNEL', '17': 'IF_TYPE_SDLC', '16': 'IF_TYPE_LAP_B', '19': 'IF_TYPE_E1', '18': 'IF_TYPE_DS1', '117': 'IF_TYPE_GIGABITETHERNET', '116': 'IF_TYPE_TDLC', '48': 'IF_TYPE_MODEM', '49': 'IF_TYPE_AAL5', '46': 'IF_TYPE_HSSI', '47': 'IF_TYPE_HIPPI', '44': 'IF_TYPE_FRAMERELAY_SERVICE', '45': 'IF_TYPE_V35', '42': 'IF_TYPE_LOCALTALK', '43': 'IF_TYPE_SMDS_DXI', '40': 'IF_TYPE_X25_PLE', '41': 'IF_TYPE_ISO88022_LLC', '1': 'IF_TYPE_OTHER', '5': 'IF_TYPE_RFC877_X25', '9': 'IF_TYPE_ISO88025_TOKENRING', '144': 'IF_TYPE_IEEE1394', '145': 'IF_TYPE_RECEIVE_ONLY', '142': 'IF_TYPE_IPFORWARD', '143': 'IF_TYPE_MSDSL', '140': 'IF_TYPE_DTM', '141': 'IF_TYPE_DCN', '77': 'IF_TYPE_LAP_D', '76': 'IF_TYPE_ISDN_U', '75': 'IF_TYPE_ISDN_S', '74': 'IF_TYPE_DLSW', '73': 'IF_TYPE_ESCON', '72': 'IF_TYPE_IBM370PARCHAN', '71': 'IF_TYPE_IEEE80211', '70': 'IF_TYPE_CHANNEL', '79': 'IF_TYPE_RSRB', '78': 'IF_TYPE_IPSWITCH'}
-    inttype = struct.unpack(">H6B",format(luidval, '016x').decode("hex"))[0]
+    inttype = struct.unpack(">H6B", codecs.decode(format(luidval,'016x'),'hex'))[0]
     return LUID_interface_types.get(str(inttype),'Unknown Interface type')
 
 parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
@@ -277,27 +280,26 @@ options = parser.parse_args()
 interactive_mode = False
 if not options.SRUM_INFILE:
     interactive_mode = True
-    options.SRUM_INFILE = raw_input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
-    options.XLSX_TEMPLATE = raw_input("What XLS Template should I use? (Press enter for the default SRUM_TEMPLATE.XLSX) : ")
-    options.reghive = raw_input("What is the full path of the SOFTWARE registry hive? Usually \image-mount-point\Windows\System32\config\SOFTWARE (or press enter to skip Network resolution) : ")
+    options.SRUM_INFILE = input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
+    options.XLSX_TEMPLATE = input("What XLS Template should I use? (Press enter for the default SRUM_TEMPLATE.XLSX) : ")
+    options.reghive = input("What is the full path of the SOFTWARE registry hive? Usually \image-mount-point\Windows\System32\config\SOFTWARE (or press enter to skip Network resolution) : ")
 
 if not options.XLSX_TEMPLATE:
     options.XLSX_TEMPLATE = "SRUM_TEMPLATE.xlsx"
 
 options.SRUM_INFILE = os.path.abspath(options.SRUM_INFILE)
 if not os.path.exists(options.SRUM_INFILE):
-    print "ESE File Not found: "+options.SRUM_INFILE
+    print("ESE File Not found: "+options.SRUM_INFILE)
     abort(1)
 
 options.XLSX_TEMPLATE = os.path.abspath(options.XLSX_TEMPLATE)
 if not os.path.exists(options.XLSX_TEMPLATE):
-    print "Template File Not found: "+options.XLSX_TEMPLATE
+    print("Template File Not found: "+options.XLSX_TEMPLATE)
     abort(1)
 
 if options.reghive:
-    options.reghive = os.path.exists(options.reghive)
     if not os.path.exists(options.reghive):
-        print "Registry File Not found: "+options.reghive
+        print("Registry File Not found: "+options.reghive)
         abort(1)
 
 if options.reghive:
@@ -307,15 +309,15 @@ try:
     warnings.simplefilter("ignore")
     ese_db = pyesedb.open(options.SRUM_INFILE)
 except Exception as e:
-    print "I could not open the specified SRUM file. Check your path and file name."
-    print "Error : ", str(e)
+    print("I could not open the specified SRUM file. Check your path and file name.")
+    print("Error : ", str(e))
     abort(1)
 
 try:
     template_wb = openpyxl.load_workbook(filename=options.XLSX_TEMPLATE, read_only=True)
 except Exception as e:
-    print "I could not open the specified template file %s. Check your path and file name." % (options.XLSX_TEMPLATE)
-    print "Error : ", str(e)
+    print("I could not open the specified template file %s. Check your path and file name." % (options.XLSX_TEMPLATE))
+    print("Error : ", str(e))
     abort(1)
 
 id_table = load_lookups(ese_db)
@@ -325,7 +327,7 @@ for each_sheet in sheets:
     #open the first sheet in the template
     template_sheet = template_wb.get_sheet_by_name(each_sheet)
     #retieve the name of the ESE table to populate the sheet with from A1
-    ese_template_table = template_sheet.cell("A1").value
+    ese_template_table = template_sheet.cell(row=1,column=1).value
 
     #retrieve the names of the ESE table columns and cell styles from row 2 and format commands from row 3 
     ese_template_fields = []
@@ -345,24 +347,24 @@ for each_sheet in sheets:
     ese_table = ese_db.get_table_by_name(ese_template_table)
     #If the table is not found it returns None
     if not ese_table:
-        print "Unable to find table",each_sheet, ese_template_table
+        print("Unable to find table",each_sheet, ese_template_table)
         continue
 
     #Now create the worksheet in the new xls file with the same name as the template
-    print "\nCreating CSV for "+each_sheet
+    print("\nCreating CSV for "+each_sheet)
 
     if not options.quiet:
         try:
-            ad = ads.next()
+            ad = next(ads)
         except:
             ad = "Thanks for using srum_dump!"
-    print "While you wait, did you know ...\n"+ad+"\n"
+    print("While you wait, did you know ...\n"+ad+"\n")
 
     try:
-        csvfile = open("srum{0}.csv".format(each_sheet.replace(" ","")), "wb")
+        csvfile = open("srum{0}.csv".format(each_sheet.replace(" ","")), "w")
         csv_writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     except Exception as e:
-        print("An Error Occured while attempting to create the CSV file. {0}".format(str(e)))
+        print(("An Error Occured while attempting to create the CSV file. {0}".format(str(e))))
         abort(1)
 
     #Now copy the header values and header formats from the template to the new worksheet
@@ -378,18 +380,21 @@ for each_sheet in sheets:
         xls_row = []
         row_num += 1
         for eachcolumn,eachformat,eachstyle in zip(ese_template_fields,ese_template_formats, ese_template_styles):
-            val = ese_row.get(eachcolumn,"UNABLETORETRIEVECOLUMN")
-            if val=="UNABLETORETRIEVECOLUMN":
-                val = "WARNING: Invalid Column Name " + eachcolumn+ " - Try one of these:"+str(ese_template_fields) + str(eachcolumn in ese_template_fields)
-            val = format_value(val, eachformat)
+            if eachcolumn == "#XLS_COLUMN#":
+                val = eachformat.replace("#ROW_NUM#", str(row_num))
+            else:
+                val = ese_row.get(eachcolumn,"UNABLETORETRIEVECOLUMN")
+                if val=="UNABLETORETRIEVECOLUMN":
+                    val = "WARNING: Invalid Column Name " + eachcolumn+ " - Try one of these:"+str(ese_template_fields) + str(eachcolumn in ese_template_fields)
+                val = format_value(val, eachformat)
             xls_row.append(val)
         csv_writer.writerow(xls_row)
-    print "Finished processing {0}.  Writing Output File.".format(each_sheet)
+    print("Finished processing {0}.  Writing Output File.".format(each_sheet))
     csvfile.flush()
     csvfile.close()
 
 ese_db.close()
 
-print "Finished!"
+print("Finished!")
 if interactive_mode:
-    raw_input("Press enter to exit")
+    input("Press enter to exit")
