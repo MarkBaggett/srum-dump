@@ -129,11 +129,14 @@ def load_lookups(database):
         elif rec_entry[b'IdType']==2:
             id_lookup[rec_entry[b'IdIndex']] = codecs.decode(rec_entry[b'IdBlob'].decode(),"HEX").decode('utf-16-le').strip("\x00")
         elif rec_entry[b'IdType']==3:
-            try:
-                user_blob = BinarySIDtoStringSID(codecs.decode(rec_entry[b'IdBlob'].decode(),"HEX"))
-            except Exception as e:
-                print("User SID not found : {} {}".format(rec_entry, e))
-                user_blob = 'None'
+            if rec_entry[b'IdBlob']:
+                try:
+                    user_blob = BinarySIDtoStringSID(codecs.decode(rec_entry[b'IdBlob'].decode(),"HEX"))
+                except Exception as e:
+                    print("User SID not found : {} {}".format(rec_entry, e))
+                    user_blob = 'None'
+            else:
+                user_blob = "None"
             #user_blob = 'None' if not rec_entry['IdBlob'] else BinarySIDtoStringSID(rec_entry['IdBlob'].decode("hex"))
             id_lookup[rec_entry[b'IdIndex']] = user_blob
         else:
@@ -325,7 +328,8 @@ for each_sheet in sheets:
             ad = next(ads)
         except:
             ad = "Thanks for using srum_dump!"
-    print("While you wait, did you know ...\n"+ad+"\n")
+        print("While you wait, did you know ...\n"+ad+"\n")
+
     xls_sheet = target_wb.create_sheet(title=each_sheet)
     #Now copy the header values and header formats from the template to the new worksheet
     header_row = []

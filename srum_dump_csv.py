@@ -273,6 +273,7 @@ parser = argparse.ArgumentParser(description="Given an SRUM database it will cre
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create templates with ese_template.py.")
 parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
+parser.add_argument("--OUT_PATH", "-o", help = "Directory to which the file will be written.", default = os.getcwd())
 parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
 
 options = parser.parse_args()
@@ -295,6 +296,10 @@ if not os.path.exists(options.SRUM_INFILE):
 options.XLSX_TEMPLATE = os.path.abspath(options.XLSX_TEMPLATE)
 if not os.path.exists(options.XLSX_TEMPLATE):
     print("Template File Not found: "+options.XLSX_TEMPLATE)
+    abort(1)
+
+if not os.path.isdir(options.OUT_PATH):
+    print("Output Path does not exist: "+options.OUT_PATH)
     abort(1)
 
 if options.reghive:
@@ -361,7 +366,8 @@ for each_sheet in sheets:
     print("While you wait, did you know ...\n"+ad+"\n")
 
     try:
-        csvfile = open("srum{0}.csv".format(each_sheet.replace(" ","")), "w")
+        fname = "srum{0}.csv".format(each_sheet.replace(" ",""))
+        csvfile = open(os.path.join(options.OUT_PATH,fname), "w")
         csv_writer = csv.writer(csvfile, delimiter=',', quotechar='"', quoting=csv.QUOTE_MINIMAL)
     except Exception as e:
         print(("An Error Occured while attempting to create the CSV file. {0}".format(str(e))))

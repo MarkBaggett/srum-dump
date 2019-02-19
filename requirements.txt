@@ -1,3 +1,5 @@
 libesedb-python==20181229
 openpyxl==2.5.14
 python-registry==1.0.4
+impacket==0.9.19.dev0
+
