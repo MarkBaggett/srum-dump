@@ -363,7 +363,7 @@ for each_sheet in sheets:
             ad = next(ads)
         except:
             ad = "Thanks for using srum_dump!"
-    print("While you wait, did you know ...\n"+ad+"\n")
+        print("While you wait, did you know ...\n"+ad+"\n")
 
     try:
         fname = "srum{0}.csv".format(each_sheet.replace(" ",""))
