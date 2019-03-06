@@ -6,7 +6,7 @@ import sys
 import struct
 import re
 import openpyxl
-from openpyxl.worksheet.write_only import WriteOnlyCell
+from openpyxl.cell import WriteOnlyCell
 from openpyxl.comments import Comment
 import argparse
 import warnings
