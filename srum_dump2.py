@@ -16,24 +16,7 @@ import codecs
 import itertools
 import PySimpleGUI as sg
 import pathlib
-
-def load_sids():
-    known_sids = {}
-    try:
-        sid_sheet = template_wb.get_sheet_by_name("Known SIDS")
-    except Exception as e:
-        print("ERROR Reading the Known Sids from SRUM Template. Is this a SRUM_DUMP2 Template? {}".format(str(e)))
-        return {}
-    for eachrow in range(1,sid_sheet.max_row+1):
-        sid = sid_sheet.cell(row = eachrow, column = 1).value
-        acct = sid_sheet.cell(row = eachrow, column = 2).value
-        known_sids[sid] = acct
-    return known_sids
-
-def lookup_sid(sid):
-    if sid in known_sids:
-        return "%s (%s)" % (sid, known_sids.get(sid,sid))
-    return sid
+import uuid
 
 def BinarySIDtoStringSID(sid):
   #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
@@ -78,7 +61,8 @@ def BinarySIDtoStringSID(sid):
       str_sid_components.append(struct.unpack("<L", authority)[0])
       start += 4
       sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
-  return lookup_sid(sid_str)
+      sid_name = template_lookups.get("Known SIDS",{}).get(sid_str,'unknown')
+  return "{} ({})".format(sid_str,sid_name)
 
 def blob_to_string(binblob):
     chrblob = codecs.decode(binblob,"hex")
@@ -108,7 +92,7 @@ def load_interfaces(reg_file):
     try:
         reg_handle = Registry.Registry(reg_file)
     except Exception as e:
-        print("I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one.")
+        print(r"I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one.")
         print(("WARNING : ", str(e)))
         return {}
     try:
@@ -132,7 +116,7 @@ def load_interfaces(reg_file):
                     profile_lookup[str(profileid)] = name.decode(encoding="latin1")
     return profile_lookup
 
-def load_lookups(database):
+def load_srumid_lookups(database):
     id_lookup = {}
     #Note columns  0 = Type, 1 = Index, 2 = Value
     lookup_table = database.get_table_by_name('SruDbIdMapTable')
@@ -146,9 +130,44 @@ def load_lookups(database):
         id_lookup[smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdIndex'])] = bin_blob
     return id_lookup
 
-                
+def load_template_lookups(template_workbook):
+    template_lookups = {}
+    for each_sheet in template_workbook.get_sheet_names():
+        if each_sheet.lower().startswith("lookup-"):
+            lookupname = each_sheet.split("-")[1]
+            template_sheet = template_workbook.get_sheet_by_name(each_sheet)
+            lookup_table = {}
+            for eachrow in range(1,template_sheet.max_row+1):
+                value = template_sheet.cell(row = eachrow, column = 1).value
+                description = template_sheet.cell(row = eachrow, column = 2).value
+                lookup_table[value] = description
+            template_lookups[lookupname] = lookup_table
+    return template_lookups
+    
+def load_template_tables(template_workbook):
+    template_tables = {}    
+    sheets = template_workbook.get_sheet_names()
+    for each_sheet in sheets:
+        #open the first sheet in the template
+        template_sheet = template_workbook.get_sheet_by_name(each_sheet)
+        #retieve the name of the ESE table to populate the sheet with from A1
+        ese_template_table = template_sheet.cell(row=1,column=1).value
+        #retrieve the names of the ESE table columns and cell styles from row 2 and format commands from row 3 
+        template_field = {}
+        #Read the first Row B & C in the template into lists so we know what data we are to extract
+        for eachcolumn in range(1,template_sheet.max_column+1):
+            field_name = template_sheet.cell(row = 2, column = eachcolumn).value
+            if field_name == None:
+                break
+            template_style = template_sheet.cell(row = 4, column = eachcolumn).style
+            template_format = template_sheet.cell(row = 3, column = eachcolumn).value
+            template_value = template_sheet.cell(row = 4, column = eachcolumn ).value
+            template_field[field_name] = (template_style,template_format,template_value)
+        template_tables[ese_template_table] = (each_sheet, template_field)
+    return template_tables    
+
+
 def smart_retrieve(ese_table, ese_record_num, column_number):
-    ese_column_types = {0: 'NULL', 1: 'BOOLEAN', 2: 'INTEGER_8BIT_UNSIGNED', 3: 'INTEGER_16BIT_SIGNED', 4: 'INTEGER_32BIT_SIGNED', 5: 'CURRENCY', 6: 'FLOAT_32BIT', 7: 'DOUBLE_64BIT', 8: 'DATE_TIME', 9: 'BINARY_DATA', 10: 'TEXT', 11: 'LARGE_BINARY_DATA', 12: 'LARGE_TEXT', 13: 'SUPER_LARGE_VALUE', 14: 'INETEGER_32BIT_UNSIGNED', 15: 'INTEGER_64BIT_SIGNED', 16: 'GUID', 17: 'INTEGER_16BIT_UNSIGNED'}
     rec = ese_table.get_record(ese_record_num)
     col_type = rec.get_column_type(column_number)
     col_data = rec.get_value_data(column_number)
@@ -186,7 +205,7 @@ def smart_retrieve(ese_table, ese_record_num, column_number):
     elif col_type == pyesedb.column_types.NULL:
         pass
     elif col_type == pyesedb.column_types.SUPER_LARGE_VALUE:
-        col_data = "" if not col_data else codec.encode(col_data,"HEX")
+        col_data = "" if not col_data else codecs.encode(col_data,"HEX")
     elif col_type == pyesedb.column_types.TEXT:
         col_data = blob_to_string(col_data)   
     else:
@@ -195,7 +214,7 @@ def smart_retrieve(ese_table, ese_record_num, column_number):
         col_data = "Empty"
     return col_data
 
-def format_output(val,eachformat, eachstyle):
+def format_output(val, eachformat, eachstyle, xls_sheet):
     "Returns a excel cell with the data formated as specified"
     new_cell = WriteOnlyCell(xls_sheet, value = "init")
     new_cell.style = eachstyle
@@ -203,20 +222,23 @@ def format_output(val,eachformat, eachstyle):
         val="None"
     elif eachformat in [None, "OLE"]:
         pass
-    elif eachformat.startswith("FILE:"):
-        pass
     elif eachformat=="FILE":
         val = file_timestamp(val)
         new_cell.number_format = 'YYYY MMM DD'
     elif eachformat.startswith("FILE:"):
         val = file_timestamp(val)
         val = val.strftime(eachformat[5:])
+    elif eachformat.lower().startswith("lookup-"):
+        lookup_name = eachformat.split("-")[1]
+        if lookup_name in template_lookups:
+            lookup_table = template_lookups.get(lookup_name,{})
+            val = lookup_table.get(val,val)
+            new_cell.comment = Comment("Warning:{} not in lookup table {} .".format(val,lookup_name))
     elif eachformat.lower() == "lookup_id":
         val = id_table.get(val, "No match in srum lookup table for %s" % (val))
     elif eachformat.lower() == "lookup_luid":
-        val = lookup_luid(val)
-    elif eachformat.lower() == "lookup_sid":
-        val = "%s (%s)" % (val, lookup_sid(val))
+        inttype = struct.unpack(">H6B", codecs.decode(format(val,'016x'),'hex'))[0]
+        val = template_lookups.get("LUID Interfaces",{}).get(inttype,"")
     elif eachformat.lower() == "seconds":
         val = val/86400.0
         new_cell.number_format = 'dd hh:mm:ss'
@@ -251,70 +273,33 @@ def format_output(val,eachformat, eachstyle):
     new_cell.value = val  
     return new_cell
 
-def load_luid():
-    known_sids = {}
-    try:
-        sid_sheet = template_wb.get_sheet_by_name("LUID Interfaces")
-    except Exception as e:
-        print("ERROR Reading the Known Sids from SRUM Template. Is this a SRUM_DUMP2 Template? {}".format(str(e)))
-        return {}
-    for eachrow in range(1,sid_sheet.max_row+1):
-        sid = sid_sheet.cell(row = eachrow, column = 1).value
-        acct = sid_sheet.cell(row = eachrow, column = 2).value
-        known_sids[sid] = acct
-    return known_sids
-    
-def lookup_luid(luidval):
-    inttype = struct.unpack(">H6B", codecs.decode(format(luidval,'016x'),'hex'))[0]
-    return LUID_interface_types.get(inttype,'Unknown Interface type')
 
-def load_templates(path_to_template):
-    templates = {}    
-    sheets = template_wb.get_sheet_names()
-    for each_sheet in sheets:
-        #open the first sheet in the template
-        template_sheet = template_wb.get_sheet_by_name(each_sheet)
-        #retieve the name of the ESE table to populate the sheet with from A1
-        ese_template_table = template_sheet.cell(row=1,column=1).value
-        #retrieve the names of the ESE table columns and cell styles from row 2 and format commands from row 3 
-        template_field = {}
-        #Read the first Row B & C in the template into lists so we know what data we are to extract
-        for eachcolumn in range(1,template_sheet.max_column+1):
-            field_name = template_sheet.cell(row = 2, column = eachcolumn).value
-            if field_name == None:
-                break
-            template_style = template_sheet.cell(row = 4, column = eachcolumn).style
-            template_format = template_sheet.cell(row = 3, column = eachcolumn).value
-            template_value = template_sheet.cell(row = 4, column = eachcolumn ).value
-            template_field[field_name] = (template_style,template_format,template_value)
-        templates[ese_template_table] = (each_sheet, template_field)
-    return templates    
-
-def process_srum(ese_db, skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable']):
-    global xls_sheet
+def process_srum(ese_db, target_wb ):
+    total_recs = sum([x.number_of_records for x in ese_db.tables if x.name not in skip_tables])
+    if not options.quiet:
+        print("Processing {} records across {} tables".format(total_recs,ese_db.number_of_tables-len(skip_tables)))
     for table_num in range(ese_db.number_of_tables):
         ese_table = ese_db.get_table(table_num)
         if ese_table.name in skip_tables:
             continue
-
-        if ese_table.name in templates:
-            tname,tfields = templates.get(ese_table.name)
+        if ese_table.name in template_tables:
+            tname,tfields = template_tables.get(ese_table.name)
         else:
             tname = ese_table.name
 
         if not options.quiet:
-            print("Now dumping table {} containing {} rows".format(tname, ese_table.number_of_records))
+            print("\nNow dumping table {} containing {} rows".format(tname, ese_table.number_of_records))
             print("While you wait, did you know ...\n {} \n".format(next(ads)))
 
         xls_sheet = target_wb.create_sheet(title=tname)
 
         header_row = [x.name for x in ese_table.columns]
-        if ese_table.name in templates:
-            tname,tfields = templates.get(ese_table.name)
+        if ese_table.name in template_tables:
+            tname,tfields = template_tables.get(ese_table.name)
             header_row = []
             for eachcol in ese_table.columns:
                 if eachcol.name in tfields:
-                    cell_style,cell_format,cell_value = tfields.get(eachcol.name)
+                    cell_style, _, cell_value = tfields.get(eachcol.name)
                     new_cell = WriteOnlyCell(xls_sheet, value=cell_value)
                     new_cell.style = cell_style
                     header_row.append( new_cell )
@@ -327,43 +312,49 @@ def process_srum(ese_db, skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSy
             try:
                 ese_row = ese_table.get_record(row_num)
             except Exception as e:
-                print("Skipping corrupt row in the %s table.  The last good row was %s." % (each_sheet, row_num))
+                print("Skipping corrupt row {} in the {} table. Because {}" % (row_num, ese_table.name, str(e)))
                 continue
             if ese_row == None:
                 continue
-            #The row is retrieved now use the template to figure out which ones you want and format them
+
+            if not options.quiet and row_num % 500 == 0:
+                 print("\r|{0:-<49}| {1:3.2f}%".format("X"*( 50 * row_num//ese_table.number_of_records), 100*row_num/ese_table.number_of_records ),end="")
+
+                #The row is retrieved now use the template to figure out which ones you want and format them
             xls_row = []
             for col_num in range(ese_table.number_of_columns):
                 val = smart_retrieve(ese_table,row_num, col_num)
                 if val=="Error":
-                    val = "WARNING: Invalid Column Name {}".format(column_name[col_num])
+                    val = "WARNING: Invalid Column Name {}".format(column_names[col_num])
                 elif val==None:
                     val="None"  
-                elif ese_table.name in templates:
-                    tname,tfields = templates.get(ese_table.name) 
+                elif ese_table.name in template_tables:
+                    tname,tfields = template_tables.get(ese_table.name) 
                     if column_names[col_num] in tfields:
-                        cstyle,cformat,cval = tfields.get(column_names[col_num])
-                        val = format_output(val, cformat, cstyle)              
+                        cstyle, cformat, _ = tfields.get(column_names[col_num])
+                        val = format_output(val, cformat, cstyle,xls_sheet)              
                 #print dir(new_cell.style.font)
                 xls_row.append(val)
             xls_sheet.append(xls_row)
+        if not options.quiet:
+            print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
     
 parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
-parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create templates with ese_template.py.")
+parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
 parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
 parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
 options = parser.parse_args()
 
-ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 teaches you to develop Forensics and Incident Response tools?.",
-       "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensic Analysis FOR500",
-       "This program uses the function BinarySIDtoStringSID from the GRR code base to convert binary data into a user SID and relies heavily on the CoreSecurity Impacket ESE module. This works because of them.  Check them out!",
+ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 teaches you to develop Forensics and Incident Response tools?",
+       "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensic Analysis FOR500.",
        "Yogesh Khatri's paper at https://files.sans.org/summit/Digital_Forensics_and_Incident_Response_Summit_2015/PDFs/Windows8SRUMForensicsYogeshKhatri.pdf was essential in the creation of this tool.",
        "By modifying the template file you have control of what ends up in the analyzed results.  Try creating an alternate template and passing it with the --XLSX_TEMPLATE option.",
+       "TIP: When using a SOFTWARE registry file you can add your own SIDS to the 'lookup-Known SIDS' tab!",
        "This program was written by Twitter:@markbaggett and @donaldjwilliam5 because @ovie said so.",
+       "SRUM-DUMP 2.0 will attempt to dump any ESE database! If not template defines a table it will do its best to guess."
        ])
-
 
 if not options.SRUM_INFILE:
     srum_path = ""
@@ -379,7 +370,7 @@ if not options.SRUM_INFILE:
     layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
     [sg.Input(srum_path,key="_SRUMPATH_"), sg.FileBrowse(target="_SRUMPATH_")], 
     [sg.Text('REQUIRED: Output folder for srum_dump.xlsx')],
-    [sg.Input(os.getcwd(),key='_OUTDIR_', enable_events=True), sg.FolderBrowse(target='_OUTDIR_')],
+    [sg.Input(os.getcwd(),key='_OUTDIR_'), sg.FolderBrowse(target='_OUTDIR_')],
     [sg.Text('REQUIRED: Path to SRUM_DUMP TEMPLATE')],
     [sg.Input(temp_path,key="_TEMPATH_"), sg.FileBrowse(target="_TEMPATH_")],
     [sg.Text('OPTIONAL: Path to registry SOFTWARE hive')],
@@ -388,11 +379,10 @@ if not options.SRUM_INFILE:
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP', layout)
+    window = sg.Window('SRUM_DUMP 2.0 (BETA)', layout)
     # Event Loop to process "events"
     while True:             
         event, values = window.Read()
-        print(event,values)
         if event in (None, 'Cancel'):
             sys.exit(0)
         if event in (None, 'OK'):
@@ -440,8 +430,6 @@ else:
         print("Registry File Not found: "+options.reghive)
         sys.exit(1)
 
-
-
 if options.reghive:
     interface_table = load_interfaces(options.reghive)
 
@@ -463,35 +451,13 @@ except Exception as e:
     sys.exit(1)
 
 
-xls_sheet =  ""
-templates = load_templates(template_wb)
-known_sids = load_sids()
-LUID_interface_types = load_luid()
-id_table = load_lookups(ese_db)
+skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable']
+template_tables = load_template_tables(template_wb)
+template_lookups = load_template_lookups(template_wb)
+id_table = load_srumid_lookups(ese_db)
+
 target_wb = openpyxl.Workbook()
-
-"""
-layout = [      
-    [sg.Output(size=(88, 20))],      
-    [sg.Text('While you wait...', size=(15, 2))] , 
-    [sg.OK()]    
-        ]      
-    
-# Create the Window
-window = sg.Window('Processing ....', layout)
-# Event Loop to process "events"
-while True:             
-    event, values = window.Read(timeout=10)
-    
-    if event in (None, 'OK'):
-        if not os.path.exists(pathlib.Path(values.get("_SRUMPATH_"))):
-            sg.Popup("SRUM DATABASE NOT FOUND.")
-            continue
-"""
-
-process_srum(ese_db)
-
-    
+process_srum(ese_db, target_wb)    
 firstsheet=target_wb.get_sheet_by_name("Sheet")
 target_wb.remove_sheet(firstsheet)
 
