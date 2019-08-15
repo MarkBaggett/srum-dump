@@ -1,12 +1,12 @@
-import pyesedb
+from openpyxl.cell import WriteOnlyCell
+from openpyxl.comments import Comment
+from Registry import Registry
 from datetime import datetime,timedelta
+import pyesedb
 import sys
 import struct
 import re
 import openpyxl
-from openpyxl.cell import WriteOnlyCell
-from openpyxl.comments import Comment
-from Registry import Registry
 import argparse
 import warnings
 import hashlib
@@ -14,9 +14,11 @@ import random
 import os
 import codecs
 import itertools
-import PySimpleGUI as sg
 import pathlib
 import uuid
+import webbrowser
+import PySimpleGUI as sg
+
 
 def BinarySIDtoStringSID(sid):
   #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
@@ -65,6 +67,9 @@ def BinarySIDtoStringSID(sid):
   return "{} ({})".format(sid_str,sid_name)
 
 def blob_to_string(binblob):
+    """Takes in a binary blob hex characters and does its best to convert it to a readable string.
+       Works great for UTF-16 LE, UTF-16 BE, ASCII like data. Otherwise return it as hex.
+    """
     chrblob = codecs.decode(binblob,"hex")
     try:
         if re.match(b'^(?:[^\x00]\x00)+\x00\x00$', chrblob):
@@ -74,21 +79,22 @@ def blob_to_string(binblob):
         else:
             binblob = chrblob.decode("latin1").strip("\x00")
     except:
-        binblob = "" if not binblob else chrblob
+        binblob = "" if not binblob else codecs.encode(chrblob,"HEX")
     return binblob
 
 def ole_timestamp(binblob):
-    #converts a hex encoded OLE time stamp to a time string
+    """converts a hex encoded OLE time stamp to a time string"""
     td,ts = str(struct.unpack("<d",binblob)[0]).split(".")
     dt = datetime(1899,12,30,0,0,0) + timedelta(days=int(td),seconds=86400 * float("0.{}".format(ts)))
     return dt
  
 def file_timestamp(binblob):
-    #converts a hex encoded windows file time stamp to a time string
+    """converts a hex encoded windows file time stamp to a time string"""
     dt = datetime(1601,1,1,0,0,0) + timedelta(microseconds=binblob/10)
     return dt
  
 def load_interfaces(reg_file):
+    """Loads the names of the wireless networks from the software registry hive"""
     try:
         reg_handle = Registry.Registry(reg_file)
     except Exception as e:
@@ -117,6 +123,7 @@ def load_interfaces(reg_file):
     return profile_lookup
 
 def load_srumid_lookups(database):
+    """loads the SRUMID numbers from the SRUM database"""
     id_lookup = {}
     #Note columns  0 = Type, 1 = Index, 2 = Value
     lookup_table = database.get_table_by_name('SruDbIdMapTable')
@@ -131,6 +138,7 @@ def load_srumid_lookups(database):
     return id_lookup
 
 def load_template_lookups(template_workbook):
+    """Load any tabs named lookup-xyz form the template file for lookups of columns with the same format type"""
     template_lookups = {}
     for each_sheet in template_workbook.get_sheet_names():
         if each_sheet.lower().startswith("lookup-"):
@@ -145,6 +153,7 @@ def load_template_lookups(template_workbook):
     return template_lookups
     
 def load_template_tables(template_workbook):
+    """Load template tabs that define the field names and formats for tables found in SRUM"""
     template_tables = {}    
     sheets = template_workbook.get_sheet_names()
     for each_sheet in sheets:
@@ -168,6 +177,7 @@ def load_template_tables(template_workbook):
 
 
 def smart_retrieve(ese_table, ese_record_num, column_number):
+    """Given a row and column will determine the format and retrieve a value from the ESE table"""
     rec = ese_table.get_record(ese_record_num)
     col_type = rec.get_column_type(column_number)
     col_data = rec.get_value_data(column_number)
@@ -215,7 +225,7 @@ def smart_retrieve(ese_table, ese_record_num, column_number):
     return col_data
 
 def format_output(val, eachformat, eachstyle, xls_sheet):
-    "Returns a excel cell with the data formated as specified"
+    """Returns a excel cell with the data formated as specified in the template table"""
     new_cell = WriteOnlyCell(xls_sheet, value = "init")
     new_cell.style = eachstyle
     if val==None:
@@ -275,6 +285,7 @@ def format_output(val, eachformat, eachstyle, xls_sheet):
 
 
 def process_srum(ese_db, target_wb ):
+    """Process all the tables and columns in the ESE database"""
     total_recs = sum([x.number_of_records for x in ese_db.tables if x.name not in skip_tables])
     if not options.quiet:
         print("Processing {} records across {} tables".format(total_recs,ese_db.number_of_tables-len(skip_tables)))
@@ -312,13 +323,13 @@ def process_srum(ese_db, target_wb ):
             try:
                 ese_row = ese_table.get_record(row_num)
             except Exception as e:
-                print("Skipping corrupt row {} in the {} table. Because {}" % (row_num, ese_table.name, str(e)))
+                print("Skipping corrupt row {0} in the {1} table. Because {2}".format(row_num, ese_table.name, str(e)))
                 continue
             if ese_row == None:
                 continue
 
             if not options.quiet and row_num % 500 == 0:
-                 print("\r|{0:-<49}| {1:3.2f}%".format("X"*( 50 * row_num//ese_table.number_of_records), 100*row_num/ese_table.number_of_records ),end="")
+                 print("\r|{0:-<50}| {1:3.2f}%".format("X"*( 50 * row_num//ese_table.number_of_records), 100*row_num/ese_table.number_of_records ),end="")
 
                 #The row is retrieved now use the template to figure out which ones you want and format them
             xls_row = []
@@ -337,7 +348,26 @@ def process_srum(ese_db, target_wb ):
                 xls_row.append(val)
             xls_sheet.append(xls_row)
         if not options.quiet:
-            print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
+            print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
+
+def show_live_system_warning():
+    """Warn the user when they try to analyze the srum on their own live system."""
+    layout = [
+          [sg.Text("It appears your trying to open SRUDB.DAT from a live system.")],
+          [sg.Text("Copying or reading that file while it is locked is unlikely to succeed.")],
+          [sg.Text("First, use a tool such as FGET that can copy files that are in use.")], 
+          [sg.Text(r"Try: \"fget -extract c:\windows\system32\sru\srudb.dat <a destination path>\"")],
+          [sg.Button("Close"), sg.Button("Download FGET")]
+         ]
+    pop_window = sg.Window("WARNING", layout, no_titlebar=True, keep_on_top=True, border_depth=5)
+    while True:
+        event,_  = pop_window.Read()
+        if event in (None,"Close"):
+            break
+        if event == "Download FGET":
+            webbrowser.open("https://github.com/MarkBaggett/srum-dump/blob/master/FGET.exe")
+    pop_window.Close()
+    return None
     
 parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
@@ -368,10 +398,10 @@ if not options.SRUM_INFILE:
         reg_path = os.path.join(os.getcwd(),"SOFTWARE")
 
     layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
-    [sg.Input(srum_path,key="_SRUMPATH_"), sg.FileBrowse(target="_SRUMPATH_")], 
-    [sg.Text('REQUIRED: Output folder for srum_dump.xlsx')],
+    [sg.Input(srum_path,key="_SRUMPATH_", enable_events=True), sg.FileBrowse(target="_SRUMPATH_")], 
+    [sg.Text('REQUIRED: Output folder for SRUM_DUMP_OUTPUT.xlsx')],
     [sg.Input(os.getcwd(),key='_OUTDIR_'), sg.FolderBrowse(target='_OUTDIR_')],
-    [sg.Text('REQUIRED: Path to SRUM_DUMP TEMPLATE')],
+    [sg.Text('REQUIRED: Path to SRUM_DUMP Template')],
     [sg.Input(temp_path,key="_TEMPATH_"), sg.FileBrowse(target="_TEMPATH_")],
     [sg.Text('OPTIONAL: Path to registry SOFTWARE hive')],
     [sg.Input(key="_REGPATH_"), sg.FileBrowse(target="_REGPATH_")],
@@ -379,53 +409,53 @@ if not options.SRUM_INFILE:
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP 2.0 (BETA)', layout)
-    # Event Loop to process "events"
+    window = sg.Window('SRUM_DUMP 2.0 (BETA 2)', layout)
     while True:             
         event, values = window.Read()
-        if event in (None, 'Cancel'):
+        if event is None:
+            break
+        if event == 'Cancel':
             sys.exit(0)
-        if event in (None, 'OK'):
-            if not os.path.exists(pathlib.Path(values.get("_SRUMPATH_"))):
-                sg.Popup("SRUM DATABASE NOT FOUND.")
+        if event == "_SRUMPATH_":
+            if str(pathlib.Path(values.get("_SRUMPATH_"))).lower() == "c:\\windows\\system32\\sru\\srudb.dat":
+                show_live_system_warning()
+                continue
+        if event == 'OK':
+            tmp_path = pathlib.Path(values.get("_SRUMPATH_"))
+            if not tmp_path.exists() or not tmp_path.is_file():
+                sg.PopupOK("SRUM DATABASE NOT FOUND.")
                 continue
             if not os.path.exists(pathlib.Path(values.get("_OUTDIR_"))):
-                sg.Popup("OUTPUT DIR NOT FOUND.")
-                continue            
-            if not os.path.exists(pathlib.Path(values.get("_TEMPATH_"))):
-                sg.Popup("SRUM TEMPLATE NOT FOUND.")
+                sg.PopupOK("OUTPUT DIR NOT FOUND.")
                 continue
-            if values.get("_REGPATH_") and not os.path.exists(pathlib.Path(values.get("_REGPATH_"))):
-                sg.Popup("REGISTRY File not found. (Leave field empty for None.)")
+            tmp_path = pathlib.Path(values.get("_TEMPATH_"))            
+            if not tmp_path.exists() or not tmp_path.is_file():
+                sg.PopupOK("SRUM TEMPLATE NOT FOUND.")
+                continue
+            tmp_path = pathlib.Path(values.get("_REGPATH_"))
+            if values.get("_REGPATH_") and not tmp_path.exists() and not tmp_path.is_file():
+                sg.PopupOK("REGISTRY File not found. (Leave field empty for None.)")
                 continue
             break
 
     window.Close()
     options.SRUM_INFILE = str(pathlib.Path(values.get("_SRUMPATH_")))
-    #input(r"What is the path to the SRUDB.DAT file? (Ex: \image-mount-point\Windows\system32\sru\srudb.dat) : ")
-    options.XLSX_OUTFILE = str(pathlib.Path(values.get("_OUTDIR_")) / "srum_out.xlsx")
-    #input(r"What is my output file name (Press enter for the default SRUM_DUMP_OUTPUT.xlsx) (Ex: \users\me\Desktop\resultx.xlsx) : ")
+    options.XLSX_OUTFILE = str(pathlib.Path(values.get("_OUTDIR_")) / "SRUM_DUMP_OUTPUT.xlsx")
     options.XLSX_TEMPLATE = str(pathlib.Path(values.get("_TEMPATH_")))
-    #input("What XLS Template should I use? (Press enter for the default SRUM_TEMPLATE.XLSX) : ")
     options.reghive = str(pathlib.Path(values.get("_REGPATH_")))
     if options.reghive == ".":
         options.reghive = ""
-    #input("What is the full path of the SOFTWARE registry hive? Usually \image-mount-point\Windows\System32\config\SOFTWARE (or press enter to skip Network resolution) : ")
 else:
     if not options.XLSX_TEMPLATE:
         options.XLSX_TEMPLATE = "SRUM_TEMPLATE2.xlsx"
-
     if not options.XLSX_OUTFILE:
         options.XLSX_OUTFILE = "SRUM_DUMP_OUTPUT.xlsx"
-
     if not os.path.exists(options.SRUM_INFILE):
         print("ESE File Not found: "+options.SRUM_INFILE)
         sys.exit(1)
-
     if not os.path.exists(options.XLSX_TEMPLATE):
         print("Template File Not found: "+options.XLSX_TEMPLATE)
         sys.exit(1)
-
     if options.reghive and not os.path.exists(options.reghive):
         print("Registry File Not found: "+options.reghive)
         sys.exit(1)
@@ -450,22 +480,21 @@ except Exception as e:
     print("Error : ", str(e))
     sys.exit(1)
 
-
 skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable']
 template_tables = load_template_tables(template_wb)
 template_lookups = load_template_lookups(template_wb)
 id_table = load_srumid_lookups(ese_db)
 
 target_wb = openpyxl.Workbook()
-process_srum(ese_db, target_wb)    
+process_srum(ese_db, target_wb)
+
 firstsheet=target_wb.get_sheet_by_name("Sheet")
 target_wb.remove_sheet(firstsheet)
-
+print("Writing output file to disk.")
 try:
     target_wb.save(options.XLSX_OUTFILE)
 except Exception as e:
     print("I was unable to write the output file.  Do you have an old version open?  If not this is probably a path or permissions issue.")
     print("Error : ", str(e))
 
-
-
+print("Done.")
