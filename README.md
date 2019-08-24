@@ -15,6 +15,7 @@ This tool also requires a SRUM_TEMPLATE that defines table and field names. You 
 TO TEST THE TOOL:
 Please Download both srum_dump2.exe and SRUM_TEMPLATE2.XLSX.
 Place them in the same directory and double click srum_dump2.exe
+If you want to analyze the system that SRUM_DUMP is running on (Live Aquisition) then it must be running as an administrator. 
 
 
 To INSTALL:
