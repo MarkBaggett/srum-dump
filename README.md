@@ -35,12 +35,22 @@ Goals for the upgrade:
 Switch from Impacket ESE engine to libesedb-python
 Add a GUI for windows Users
 Add progress bars for output 
-Be able to process ANY ese database
+Be able to process ANY ese database, not just the SRUM
 Dump all fields tables including those that are not defined in the templates
 Allow templates to be used to specify field formats, column names, table names, SID lookups and other lookups.
+LIVE System Aquisition when run as administrator
 
-Known Issues:
+Known Issues: 
 I have removed the capability to have XLS calculated fields and copy XLSX tabs. Considering dropping functionality from program. Users can easily add these fields after processing is completed.
+```
+
+```
+Template Usage
+The srum_template2.xlsx file is a way of defining lookups for fields found in ESE databases.
+To understand its power try to dump your srum with BLANK_TEMPLATE.XLSX and compare the results.
+You can provide friendsly names for tables and columns in the ESE tables.
+The format row in the template tells srum to process fields and resolve their values. Some formats such as "lookup_SID" and "lookup_LUID" are hardcoded functions in srum_dump. You can suppliment the built in know SIDS with those form your investigation by adding them to the lookup-Known Sids sheet. 
+ESE fields can be resolved dynamically when the format row contain "lookup-xlssheet-name".  You can Add XLS tabs containing lookup tables then add srum-dump will use it to resolve values in ese tables if their table has the name of the lookup table in format row (see lookup-ExampleNameNums) 
 ```
 
 ```
@@ -68,3 +78,4 @@ pip install python-registry
 pip install pyinstaller
 pip install pysimplegui
 ```
+

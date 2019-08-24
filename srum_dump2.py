@@ -1,5 +1,4 @@
 from openpyxl.cell import WriteOnlyCell
-from openpyxl.comments import Comment
 from Registry import Registry
 from datetime import datetime,timedelta
 import pyesedb
@@ -18,59 +17,66 @@ import pathlib
 import uuid
 import webbrowser
 import PySimpleGUI as sg
+import tempfile
+import urllib.request
+import subprocess
+import ctypes
 
 
-def BinarySIDtoStringSID(sid):
-  #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
-  """Converts a binary SID to its string representation.
-  https://msdn.microsoft.com/en-us/library/windows/desktop/aa379597.aspx
-  The byte representation of an SID is as follows:
-    Offset  Length  Description
-    00      01      revision
-    01      01      sub-authority count
-    02      06      authority (big endian)
-    08      04      subauthority #1 (little endian)
-    0b      04      subauthority #2 (little endian)
-    ...
-  Args:
-    sid: A byte array.
-  Returns:
-    SID in string form.
-  Raises:
-    ValueError: If the binary SID is malformed.
-  """
-  if not sid:
-    return ""
-  sid = codecs.decode(sid,"hex")
-  str_sid_components = [sid[0]]
-  # Now decode the 48-byte portion
-  if len(sid) >= 8:
-    subauthority_count = sid[1]
-    identifier_authority = struct.unpack(">H", sid[2:4])[0]
-    identifier_authority <<= 32
-    identifier_authority |= struct.unpack(">L", sid[4:8])[0]
-    str_sid_components.append(identifier_authority)
-    start = 8
-    for i in range(subauthority_count):
-      authority = sid[start:start + 4]
-      if not authority:
-        break
-      if len(authority) < 4:
-        raise ValueError("In binary SID '%s', component %d has been truncated. "
+def BinarySIDtoStringSID(sid_str):
+    #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
+    """Converts a binary SID to its string representation.
+     https://msdn.microsoft.com/en-us/library/windows/desktop/aa379597.aspx
+    The byte representation of an SID is as follows:
+      Offset  Length  Description
+      00      01      revision
+      01      01      sub-authority count
+      02      06      authority (big endian)
+      08      04      subauthority #1 (little endian)
+      0b      04      subauthority #2 (little endian)
+      ...
+    Args:
+      sid: A byte array.
+    Returns:
+      SID in string form.
+    Raises:
+      ValueError: If the binary SID is malformed.
+    """
+    if not sid_str:
+        return ""
+    sid = codecs.decode(sid_str,"hex")
+    str_sid_components = [sid[0]]
+    # Now decode the 48-byte portion
+    if len(sid) >= 8:
+        subauthority_count = sid[1]
+        identifier_authority = struct.unpack(">H", sid[2:4])[0]
+        identifier_authority <<= 32
+        identifier_authority |= struct.unpack(">L", sid[4:8])[0]
+        str_sid_components.append(identifier_authority)
+        start = 8
+        for i in range(subauthority_count):
+            authority = sid[start:start + 4]
+            if not authority:
+                break
+            if len(authority) < 4:
+                raise ValueError("In binary SID '%s', component %d has been truncated. "
                          "Expected 4 bytes, found %d: (%s)",
                          ",".join([str(ord(c)) for c in sid]), i,
                          len(authority), authority)
-      str_sid_components.append(struct.unpack("<L", authority)[0])
-      start += 4
-      sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
-      sid_name = template_lookups.get("Known SIDS",{}).get(sid_str,'unknown')
-  return "{} ({})".format(sid_str,sid_name)
+            str_sid_components.append(struct.unpack("<L", authority)[0])
+            start += 4
+            sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
+    sid_name = template_lookups.get("Known SIDS",{}).get(sid_str,'unknown')
+    return "{} ({})".format(sid_str,sid_name)
 
 def blob_to_string(binblob):
     """Takes in a binary blob hex characters and does its best to convert it to a readable string.
        Works great for UTF-16 LE, UTF-16 BE, ASCII like data. Otherwise return it as hex.
     """
-    chrblob = codecs.decode(binblob,"hex")
+    try:
+        chrblob = codecs.decode(binblob,"hex")
+    except:
+        chrblob = binblob
     try:
         if re.match(b'^(?:[^\x00]\x00)+\x00\x00$', chrblob):
             binblob = chrblob.decode("utf-16-le").strip("\x00")
@@ -79,20 +85,41 @@ def blob_to_string(binblob):
         else:
             binblob = chrblob.decode("latin1").strip("\x00")
     except:
-        binblob = "" if not binblob else codecs.encode(chrblob,"HEX")
+        binblob = "" if not binblob else codecs.decode(binblob,"latin-1")
     return binblob
 
 def ole_timestamp(binblob):
     """converts a hex encoded OLE time stamp to a time string"""
-    td,ts = str(struct.unpack("<d",binblob)[0]).split(".")
-    dt = datetime(1899,12,30,0,0,0) + timedelta(days=int(td),seconds=86400 * float("0.{}".format(ts)))
+    try:
+        td,ts = str(struct.unpack("<d",binblob)[0]).split(".")
+        dt = datetime(1899,12,30,0,0,0) + timedelta(days=int(td),seconds=86400 * float("0.{}".format(ts)))
+    except:
+        dt = "This field is incorrectly identified as an OLE timestamp in the template."
     return dt
  
 def file_timestamp(binblob):
     """converts a hex encoded windows file time stamp to a time string"""
-    dt = datetime(1601,1,1,0,0,0) + timedelta(microseconds=binblob/10)
+    try:
+        dt = datetime(1601,1,1,0,0,0) + timedelta(microseconds=binblob/10)
+    except:
+        dt = "This field is incorrectly identified as a file timestamp in the template"
     return dt
- 
+
+def load_registry_sids(reg_file):
+    """Given Software hive find SID usernames"""
+    sids = {}
+    profile_key = r"Microsoft\Windows NT\CurrentVersion\ProfileList"
+    tgt_value = "ProfileImagePath"
+    try:
+        reg_handle = Registry.Registry(reg_file)
+        key_handle = reg_handle.open(profile_key)
+        for eachsid in key_handle.subkeys():
+            sids_path = eachsid.value(tgt_value).value()
+            sids[eachsid.name()] = sids_path.split("\\")[-1]
+    except:
+        return {}
+    return sids
+
 def load_interfaces(reg_file):
     """Loads the names of the wireless networks from the software registry hive"""
     try:
@@ -171,6 +198,8 @@ def load_template_tables(template_workbook):
             template_style = template_sheet.cell(row = 4, column = eachcolumn).style
             template_format = template_sheet.cell(row = 3, column = eachcolumn).value
             template_value = template_sheet.cell(row = 4, column = eachcolumn ).value
+            if not template_value:
+                template_value= field_name
             template_field[field_name] = (template_style,template_format,template_value)
         template_tables[ese_template_table] = (each_sheet, template_field)
     return template_tables    
@@ -243,7 +272,6 @@ def format_output(val, eachformat, eachstyle, xls_sheet):
         if lookup_name in template_lookups:
             lookup_table = template_lookups.get(lookup_name,{})
             val = lookup_table.get(val,val)
-            new_cell.comment = Comment("Warning:{} not in lookup table {} .".format(val,lookup_name))
     elif eachformat.lower() == "lookup_id":
         val = id_table.get(val, "No match in srum lookup table for %s" % (val))
     elif eachformat.lower() == "lookup_luid":
@@ -271,15 +299,12 @@ def format_output(val, eachformat, eachstyle, xls_sheet):
                 val = int(str(val),2)
             except :
                 val = val
-                new_cell.comment = Comment("Warning: Unable to convert value %s to binary." % (val),"srum_dump")
     elif eachformat.lower() == "interface_id" and options.reghive:
         val = interface_table.get(str(val),"")
     elif eachformat.lower() == "interface_id" and not options.reghive:
         val = val
-        new_cell.comment = Comment("WARNING: Ignoring interface_id format command because the --REG_HIVE was not specified.", "srum_dump")
     else:
         val = val
-        new_cell.comment =  Comment("WARNING: I'm not sure what to do with the format command %s.  It was ignored." % (eachformat), "srum_dump")  
     new_cell.value = val  
     return new_cell
 
@@ -296,7 +321,7 @@ def process_srum(ese_db, target_wb ):
         if ese_table.name in template_tables:
             tname,tfields = template_tables.get(ese_table.name)
         else:
-            tname = ese_table.name
+            tname = ese_table.name[1:15]
 
         if not options.quiet:
             print("\nNow dumping table {} containing {} rows".format(tname, ese_table.number_of_records))
@@ -356,19 +381,52 @@ def show_live_system_warning():
           [sg.Text("It appears your trying to open SRUDB.DAT from a live system.")],
           [sg.Text("Copying or reading that file while it is locked is unlikely to succeed.")],
           [sg.Text("First, use a tool such as FGET that can copy files that are in use.")], 
-          [sg.Text(r"Try: \"fget -extract c:\windows\system32\sru\srudb.dat <a destination path>\"")],
-          [sg.Button("Close"), sg.Button("Download FGET")]
+          [sg.Text(r"Try: 'fget -extract c:\windows\system32\sru\srudb.dat <a destination path>'")],
+          [sg.Button("Close"), sg.Button("Download FGET") ]
          ]
+    if ctypes.windll.shell32.IsUserAnAdmin() == 1:
+        layout[-1].append(sg.Button("Auto Extract"))
     pop_window = sg.Window("WARNING", layout, no_titlebar=True, keep_on_top=True, border_depth=5)
+    return_value = None
     while True:
         event,_  = pop_window.Read()
         if event in (None,"Close"):
             break
         if event == "Download FGET":
             webbrowser.open("https://github.com/MarkBaggett/srum-dump/blob/master/FGET.exe")
+        if event == "Auto Extract":
+            return_value = extract_live_file()
+            break
     pop_window.Close()
+    return return_value
+
+def extract_live_file():
+    try:
+        fget_file = tempfile.NamedTemporaryFile(mode="w+b", suffix=".exe",delete=False)
+        extracted_srum = tempfile.NamedTemporaryFile(mode="w+b", suffix = ".dat", delete=False)
+        registry_file = tempfile.NamedTemporaryFile(mode="w+b", suffix = ".reg", delete=False)
+        print("Downloading fget.exe to {}".format(fget_file.name))
+        fget_binary = urllib.request.urlopen('https://github.com/MarkBaggett/srum-dump/raw/master/FGET.exe').read()
+        fget_file.write(fget_binary)
+        fget_file.close()
+        cmdline = r"{} -extract c:\\windows\\system32\\sru\srudb.dat {}".format(fget_file.name, extracted_srum.name)
+        print(cmdline)
+        phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out1,_ = phandle.communicate()
+        cmdline = r"{} -extract c:\\windows\\system32\\config\SOFTWARE {}".format(fget_file.name, registry_file.name)
+        print(cmdline)
+        phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        out2,_ = phandle.communicate()
+        pathlib.Path(fget_file.name).unlink()
+    except Exception as e:
+        print("Unable to automatically extract srum. {}".format(str(e)))
+        return None
+    if b"returned error" in out1 or b"returned error" in out2:
+        print("ERROR\n SRUM Extraction: {}\n Registry Extraction {}".format(out1,out2))
+    elif b"SUCCESS" in out1 and b"SUCCESS" in out2:
+        return extracted_srum.name, registry_file.name
     return None
-    
+ 
 parser = argparse.ArgumentParser(description="Given an SRUM database it will create an XLS spreadsheet with analysis of the data in the database.")
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
@@ -390,9 +448,11 @@ if not options.SRUM_INFILE:
     srum_path = ""
     if os.path.exists("SRUDB.DAT"):
         srum_path = os.path.join(os.getcwd(),"SRUDB.DAT")
-    temp_path = ""
-    if os.path.exists("SRUM_TEMPLATE.XLSX"):
-        temp_path = os.path.join(os.getcwd(),"SRUM_TEMPLATE2.XLSX")
+    temp_path = pathlib.Path.cwd() / "SRUM_TEMPLATE2.XLSX"
+    if temp_path.exists():
+        temp_path = str(temp_path)
+    else:
+        temp_path = ""
     reg_path = ""
     if os.path.exists("SOFTWARE"):
         reg_path = os.path.join(os.getcwd(),"SOFTWARE")
@@ -403,22 +463,27 @@ if not options.SRUM_INFILE:
     [sg.Input(os.getcwd(),key='_OUTDIR_'), sg.FolderBrowse(target='_OUTDIR_')],
     [sg.Text('REQUIRED: Path to SRUM_DUMP Template')],
     [sg.Input(temp_path,key="_TEMPATH_"), sg.FileBrowse(target="_TEMPATH_")],
-    [sg.Text('OPTIONAL: Path to registry SOFTWARE hive')],
+    [sg.Text('RECOMMENDED: Path to registry SOFTWARE hive')],
     [sg.Input(key="_REGPATH_"), sg.FileBrowse(target="_REGPATH_")],
-    [sg.Text("")],
+    [sg.Text("Click here for support via Twitter @MarkBaggett",enable_events=True, key="_SUPPORT_", text_color="Blue")],
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP 2.0 (BETA 2)', layout)
+    window = sg.Window('SRUM_DUMP 2.0', layout)
     while True:             
         event, values = window.Read()
         if event is None:
             break
+        if event == "_SUPPORT_":
+            webbrowser.open("https://twitter.com/MarkBaggett")
         if event == 'Cancel':
             sys.exit(0)
         if event == "_SRUMPATH_":
             if str(pathlib.Path(values.get("_SRUMPATH_"))).lower() == "c:\\windows\\system32\\sru\\srudb.dat":
-                show_live_system_warning()
+                result = show_live_system_warning() 
+                if result:
+                    window.Element("_SRUMPATH_").Update(result[0])
+                    window.Element("_REGPATH_").Update(result[1])
                 continue
         if event == 'OK':
             tmp_path = pathlib.Path(values.get("_SRUMPATH_"))
@@ -462,6 +527,7 @@ else:
 
 if options.reghive:
     interface_table = load_interfaces(options.reghive)
+    regsids = load_registry_sids(options.reghive)
 
 try:
     warnings.simplefilter("ignore")
@@ -483,6 +549,10 @@ except Exception as e:
 skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable']
 template_tables = load_template_tables(template_wb)
 template_lookups = load_template_lookups(template_wb)
+if regsids:
+    template_lookups.get("Known SIDS",{}).update(regsids)
+    #print("REGSIDS!!!")
+    #print(template_lookups.get("Known SIDS"))
 id_table = load_srumid_lookups(ese_db)
 
 target_wb = openpyxl.Workbook()
