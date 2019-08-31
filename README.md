@@ -1,13 +1,15 @@
 ## SRUM-DUMP2
 
 
-SRUM Dump extracts information from the System Resource Utilization Management Database. 
+SRUM Dump extracts information from the System Resource Utilization Management Database and creates a Excel spreadsheet. 
 
 The SRUM is one of the best sources for applications that have run on your system in the last 30 days and is invaluable to your incident investigations! 
 
 To use the tool you will need a copy of the SRUM (located in c:\windows\system32\sru\srudb.dat, but locked by the OS).
 
 This tool also requires a SRUM_TEMPLATE that defines table and field names. You can optionally provide the SOFTWARE registry hive and the tool will tell you which wireless networks were in use by applications.
+
+If you are looking for a version of this tool that creates CSV files instead of an Excel spreadsheet, dumps targeted tables or processes any ese then check out [ese2csv.](https://github.com/MarkBaggett/ese-analyst)  ese2csv.exe is designed specifically for csv files with the CLI user in mind.
 
 TO RUN THE TOOL :
 
@@ -36,11 +38,11 @@ In addition to the GUI srum-dump2 has the following enhancements over the origin
  - LIVE System Aquisition when run as administrator
  - Speed Improved
 
-The live acquisition warning dialog box will appear if you select the file **c:\Windows\system32\sru\srudb.dat**.  This file is locked by the OS and can not be directly accessed. From here you can easily download a copy of FGET to acquire an unlocked copy of the file. If, and only if, you are an administrator a button will appear that says "AUTO EXTRACT".  
+The live acquisition warning dialog box will appear if you select the file **c:\Windows\system32\sru\srudb.dat**.  This file is locked by the OS and can not be directly accessed. From here you can easily download a copy of FGET to acquire an unlocked copy of the file. If, and only if, **you are an administrator** a button will appear that says "AUTO EXTRACT".  
 
-![Button only appears when run as an administrator](srum_live_acquisition.jpg)
+![acquisition](srum_live_acquisition.jpg)
 
-If you click this button then it will download FGET from my github and acquire a copy of both the SRUDB.DAT file and the associated SOFTWARE registry hive. Then it will set the paths in the GUI so that points to the acquired copies in a temporary directory.   Alternatively you can click the button next to it to download a copy of fget.exe and extract the files manually.
+If you click this button then it will download FGET from my github and acquire a copy of both the SRUDB.DAT file and the associated SOFTWARE registry hive. Then it will set the paths in the GUI so that points to the acquired copies in a temporary directory.
 
 Removed Features: 
 I have removed the capability of defining calculated fields in the template.
