@@ -153,8 +153,7 @@ def load_srumid_lookups(database):
     """loads the SRUMID numbers from the SRUM database"""
     id_lookup = {}
     #Note columns  0 = Type, 1 = Index, 2 = Value
-    lookup_table = database.get_table_by_name('SruDbIdMapTable')
-    column_lookup = dict([(x.name,index) for index,x in enumerate(lookup_table.columns)])
+    lookup_table = database.get_table_by_name('SruDbIdMapTable')   
     for rec_entry_num in range(lookup_table.number_of_records):
         bin_blob = smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdBlob'])
         if smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdType'])==3:
@@ -224,7 +223,7 @@ def smart_retrieve(ese_table, ese_record_num, column_number):
     elif col_type == pyesedb.column_types.FLOAT_32BIT:
         col_data = 0.0 if not col_data else struct.unpack('f',col_data)[0]
     elif col_type == pyesedb.column_types.GUID:
-        col_data = str(uuid.UUID(col_data.encode('hex')))    
+        col_data = 0 if not col_data else str(uuid.UUID(bytes = col_data))
     elif col_type == pyesedb.column_types.INTEGER_16BIT_SIGNED:
         col_data = 0 if not col_data else struct.unpack('h',col_data)[0]
     elif col_type == pyesedb.column_types.INTEGER_16BIT_UNSIGNED:
