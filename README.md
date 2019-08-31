@@ -27,7 +27,7 @@ To run from source you will need this code and some third party modules that it 
 
 ## Program Features
 
-You can provide all of the options form the command line, but if you do not the GUI will launch.  There are some features like live acquisition that are only available in the GUI when run as an administrator.
+You may provide all of the options from the command line. If the name of a srum file is not passed then the GUI will launch.  There are some features like live acquisition that are only available in the GUI when run as an administrator.
 
 ![SRUM-DUMP GUI](srum_dump2.jpg)
 
@@ -47,9 +47,7 @@ If you click this button then it will download FGET from my github and acquire a
 Removed Features: 
 I have removed the capability of defining calculated fields in the template.
 
-The srum_template2.xlsx file is a way of defining friendly names and formats for fields found in ESE databases. To understand its power try to dump your srum with BLANK_TEMPLATE.XLSX and compare the results.
-The format row in the template tells srum to process fields and resolve their values. Some formats such as "lookup_SID" and "lookup_LUID" are hardcoded functions in srum_dump. You can suppliment the built in know SIDS with those form your investigation by adding them to the lookup-Known Sids sheet. 
-ESE fields can be resolved dynamically when the format row contain "lookup-xlssheet-name".  You can Add XLS tabs containing lookup tables then add srum-dump will use it to resolve values in ese tables if their table has the name of the lookup table in format row (see lookup-ExampleNameNums) 
+The srum_template2.xlsx file is a way of defining friendly names and formats for fields found in ESE databases. To understand its power try to dump your srum with BLANK_TEMPLATE.XLSX and compare the results.The format row in the template tells srum to process fields and resolve their values. Some formats such as "lookup_SID" and "lookup_LUID" are hardcoded functions in srum_dump. You can suppliment the built in know SIDS with those form your investigation by adding them to the lookup-Known Sids sheet. ESE fields can be resolved dynamically when the format row contain "lookup-xlssheet-name".  You can Add XLS tabs containing lookup tables then add srum-dump will use it to resolve values in ese tables if their table has the name of the lookup table in format row (see lookup-ExampleNameNums) 
 
 ## Windows Installation:
 
