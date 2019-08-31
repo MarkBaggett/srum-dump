@@ -153,7 +153,8 @@ def load_srumid_lookups(database):
     """loads the SRUMID numbers from the SRUM database"""
     id_lookup = {}
     #Note columns  0 = Type, 1 = Index, 2 = Value
-    lookup_table = database.get_table_by_name('SruDbIdMapTable')   
+    lookup_table = database.get_table_by_name('SruDbIdMapTable')
+    column_lookup = dict([(x.name,index) for index,x in enumerate(lookup_table.columns)]) 
     for rec_entry_num in range(lookup_table.number_of_records):
         bin_blob = smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdBlob'])
         if smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdType'])==3:
