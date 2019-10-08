@@ -410,29 +410,37 @@ def extract_live_file():
         #extracted_srum = tempfile.NamedTemporaryFile(mode="w+b", suffix = ".dat", delete=False
         extracted_srum = pathlib.Path(tmp_dir) / "srudb.dat"
         esentutl_path = pathlib.Path(os.environ.get("COMSPEC")).parent / "esentutl.exe"
-        print("Downloading fget.exe to {}".format(str(fget_file)))
-        fget_binary = urllib.request.urlopen('https://github.com/MarkBaggett/srum-dump/raw/master/FGET.exe').read()
-        fget_file.write_bytes(fget_binary)
         if esentutl_path.exists():
             print("Extracting srum with esentutl.exe")
             cmdline = r"{} /y c:\\windows\\system32\\sru\\srudb.dat /vss /d {}".format(str(esentutl_path), str(extracted_srum))
+            print(cmdline)
+            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out1,_ = phandle.communicate()
+            print("Extracting Registry with esentutl.exe")
+            cmdline = r"{} /y c:\\windows\\system32\\config\\SOFTWARE /vss /d {}".format(str(esentutl_path), str(registry_file))
+            print(cmdline)
+            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out2,_ = phandle.communicate()
         else:
+            print("Downloading fget.exe to {}".format(str(fget_file)))
+            fget_binary = urllib.request.urlopen('https://github.com/MarkBaggett/srum-dump/raw/master/FGET.exe').read()
+            fget_file.write_bytes(fget_binary)
             print("Extracting srum with fget.exe")
             cmdline = r"{} -extract c:\\windows\\system32\\sru\srudb.dat {}".format(str(fget_file), str(extracted_srum))
-        print(cmdline)
-        phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out1,_ = phandle.communicate()
-        cmdline = r"{} -extract c:\\windows\\system32\\config\SOFTWARE {}".format(str(fget_file), str(registry_file))
-        print(cmdline)
-        phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        out2,_ = phandle.communicate()
-        fget_file.unlink()
+            print(cmdline)
+            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out1,_ = phandle.communicate()
+            cmdline = r"{} -extract c:\\windows\\system32\\config\SOFTWARE {}".format(str(fget_file), str(registry_file))
+            print(cmdline)
+            phandle = subprocess.Popen(cmdline, shell=True,stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out2,_ = phandle.communicate()
+            fget_file.unlink()
     except Exception as e:
         print("Unable to automatically extract srum. {}\n{}\n{}".format(str(e), out1.decode(), out2.decode()))
         return None
-    if (b"returned error" in out1) or (b"Init failed" in out1) or (b"returned error" in out2):
+    if (b"returned error" in out1+out2) or (b"Init failed" in out1+out2):
         print("ERROR\n SRUM Extraction: {}\n Registry Extraction {}".format(out1.decode(),out2.decode()))
-    elif b"success" in out1.lower() and b"SUCCESS" in out2:
+    elif b"success" in out1.lower() and b"success" in out2.lower():
         return str(extracted_srum), str(registry_file)
     else:
         print("Unable to determine success or failure.", out1.decode(),"\n",out2.decode())
