@@ -488,7 +488,7 @@ if not options.SRUM_INFILE:
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP 2.0', layout)
+    window = sg.Window('SRUM_DUMP 2.1', layout)
     while True:             
         event, values = window.Read()
         if event is None:
@@ -544,6 +544,7 @@ else:
         print("Registry File Not found: "+options.reghive)
         sys.exit(1)
 
+regsids = {}
 if options.reghive:
     interface_table = load_interfaces(options.reghive)
     regsids = load_registry_sids(options.reghive)
