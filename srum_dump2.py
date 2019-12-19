@@ -246,7 +246,7 @@ def smart_retrieve(ese_table, ese_record_num, column_number):
     elif col_type == pyesedb.column_types.SUPER_LARGE_VALUE:
         col_data = "" if not col_data else codecs.encode(col_data,"HEX")
     elif col_type == pyesedb.column_types.TEXT:
-        col_data = blob_to_string(col_data)   
+        col_data = blob_to_string(col_data)  
     else:
         col_data = blob_to_string(col_data)    
     if col_data==None:
@@ -261,6 +261,8 @@ def format_output(val, eachformat, eachstyle, xls_sheet):
         val="None"
     elif eachformat in [None, "OLE"]:
         pass
+    elif eachformat.startswith("OLE:"):
+        val = val.strftime(eachformat[4:])
     elif eachformat=="FILE":
         val = file_timestamp(val)
         new_cell.number_format = 'YYYY MMM DD'
