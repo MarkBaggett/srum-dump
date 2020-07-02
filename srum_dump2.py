@@ -307,7 +307,10 @@ def format_output(val, eachformat, eachstyle, xls_sheet):
         val = val
     else:
         val = val
-    new_cell.value = val  
+    try:
+        new_cell.value = val
+    except:
+        new_cell.value = re.sub(r'[\000-\010]|[\013-\014]|[\016-\037]|[\x00-\x1f\x7f-\x9f]|[\uffff]',"",val)
     return new_cell
 
 
