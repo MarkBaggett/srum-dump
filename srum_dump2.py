@@ -493,7 +493,7 @@ if not options.SRUM_INFILE:
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP 2.1', layout)
+    window = sg.Window('SRUM_DUMP 2.2', layout)
     while True:             
         event, values = window.Read()
         if event is None:
