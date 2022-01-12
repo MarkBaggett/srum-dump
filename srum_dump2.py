@@ -465,7 +465,7 @@ ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 
        "By modifying the template file you have control of what ends up in the analyzed results.  Try creating an alternate template and passing it with the --XLSX_TEMPLATE option.",
        "TIP: When using a SOFTWARE registry file you can add your own SIDS to the 'lookup-Known SIDS' tab!",
        "This program was written by Twitter:@markbaggett and @donaldjwilliam5 because @ovie said so.",
-       "SRUM-DUMP 2.0 will attempt to dump any ESE database! If not template defines a table it will do its best to guess."
+       "SRUM-DUMP 2.0 will attempt to dump any ESE database! If no template defines a table it will do its best to guess."
        ])
 
 if not options.SRUM_INFILE:
