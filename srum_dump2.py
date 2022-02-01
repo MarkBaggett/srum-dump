@@ -142,7 +142,7 @@ def load_interfaces(reg_file):
             profileid = [x.value() for x in list(eachprofile.values()) if x.name()=="ProfileIndex"][0]
             metadata = list(eachprofile.subkey("MetaData").values())
             for eachvalue in metadata:
-                if eachvalue.name()=="Channel Hints":
+                if eachvalue.name() in ["Channel Hints", "Band Channel Hints"]:
                     channelhintraw = eachvalue.value()
                     hintlength = struct.unpack("I", channelhintraw[0:4])[0]
                     name = channelhintraw[4:hintlength+4] 
@@ -481,7 +481,7 @@ if not options.SRUM_INFILE:
     if os.path.exists("SOFTWARE"):
         reg_path = os.path.join(os.getcwd(),"SOFTWARE")
 
-    sg.ChangeLookAndFeel('TanBlue')
+    sg.ChangeLookAndFeel('Kayak')
     layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
     [sg.Input(srum_path,key="_SRUMPATH_", enable_events=True), sg.FileBrowse(target="_SRUMPATH_")], 
     [sg.Text('REQUIRED: Output folder for SRUM_DUMP_OUTPUT.xlsx')],
@@ -494,7 +494,7 @@ if not options.SRUM_INFILE:
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP 2.3', layout)
+    window = sg.Window('SRUM_DUMP 2.4', layout)
 
     while True:             
         event, values = window.Read()
