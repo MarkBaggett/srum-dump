@@ -455,13 +455,13 @@ parser = argparse.ArgumentParser(description="Given an SRUM database it will cre
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
 parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
-parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
+parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If SOFTWARE registry hive is provided then the names of the network profiles will be resolved.")
 parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
 options = parser.parse_args()
 
 ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 teaches you to develop Forensics and Incident Response tools?",
        "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensic Analysis FOR500.",
-       "Yogesh Khatri's paper at https://files.sans.org/summit/Digital_Forensics_and_Incident_Response_Summit_2015/PDFs/Windows8SRUMForensicsYogeshKhatri.pdf was essential in the creation of this tool.",
+       "Yogesh Khatri's paper at https://github.com/ydkhatri/Presentations/blob/master/SRUM%20Forensics-SANS.DFIR.summit.2015.pdf was essential in the creation of this tool.",
        "By modifying the template file you have control of what ends up in the analyzed results.  Try creating an alternate template and passing it with the --XLSX_TEMPLATE option.",
        "TIP: When using a SOFTWARE registry file you can add your own SIDS to the 'lookup-Known SIDS' tab!",
        "This program was written by Twitter:@markbaggett and @donaldjwilliam5 because @ovie said so.",
