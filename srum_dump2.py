@@ -400,6 +400,8 @@ def process_srum(ese_db, target_wb ):
         # Bold first row
         for x in range(0, len(header_row)):
             xls_sheet[f'{openpyxl.utils.get_column_letter(x+1)}1'].font = Font(bold=True)
+        # Freeze first row
+        xls_sheet.freeze_panes = "A2"
         if not options.quiet:
             print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
 
