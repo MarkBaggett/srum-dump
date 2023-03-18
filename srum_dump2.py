@@ -1,4 +1,5 @@
-from openpyxl.cell import WriteOnlyCell
+from openpyxl.cell import WriteOnlyCell, Cell
+from openpyxl.styles import Font
 from Registry import Registry
 from datetime import datetime,timedelta
 import pyesedb
@@ -334,21 +335,24 @@ def process_srum(ese_db, target_wb ):
 
         xls_sheet = target_wb.create_sheet(title=tname)
 
+        column_names = [x.name for x in ese_table.columns]
+        column_widths = [len(x.name)+2 for x in ese_table.columns]
+
         header_row = [x.name for x in ese_table.columns]
         if ese_table.name in template_tables:
             tname,tfields = template_tables.get(ese_table.name)
             header_row = []
-            for eachcol in ese_table.columns:
+            for i, eachcol in enumerate(ese_table.columns):
                 if eachcol.name in tfields:
                     cell_style, _, cell_value = tfields.get(eachcol.name)
                     new_cell = WriteOnlyCell(xls_sheet, value=cell_value)
                     new_cell.style = cell_style
                     header_row.append( new_cell )
+                    column_widths[i] = len(str(cell_value)) + 2
                 else:
                     header_row.append(WriteOnlyCell(xls_sheet, value=eachcol.name))
         xls_sheet.append(header_row)
     
-        column_names = [x.name for x in ese_table.columns]
         for row_num in range(ese_table.number_of_records):
             try:
                 ese_row = ese_table.get_record(row_num)
@@ -373,10 +377,29 @@ def process_srum(ese_db, target_wb ):
                     tname,tfields = template_tables.get(ese_table.name) 
                     if column_names[col_num] in tfields:
                         cstyle, cformat, _ = tfields.get(column_names[col_num])
-                        val = format_output(val, cformat, cstyle,xls_sheet)              
+                        val = format_output(val, cformat, cstyle,xls_sheet)
+                val_len = len(str(val.value)) if isinstance(val, Cell) else len(str(val))
+                if column_widths[col_num] < val_len:
+                    column_widths[col_num] = val_len
                 #print dir(new_cell.style.font)
                 xls_row.append(val)
             xls_sheet.append(xls_row)
+        # Adjust column widths now
+        if ese_table.name in template_tables:
+            tname,tfields = template_tables.get(ese_table.name)
+            counter = 1
+            for i in range(ese_table.number_of_columns):
+                if column_names[i] in tfields:
+                    xls_sheet.column_dimensions[openpyxl.utils.get_column_letter(counter)].width = min(column_widths[i], 80)
+                counter += 1
+        else:
+            for i in range(ese_table.number_of_columns):
+                xls_sheet.column_dimensions[openpyxl.utils.get_column_letter(i+1)].width = min(column_widths[i], 80)
+        # Add AutoFilter
+        xls_sheet.auto_filter.ref = xls_sheet.dimensions
+        # Bold first row
+        for x in range(0, len(header_row)):
+            xls_sheet[f'{openpyxl.utils.get_column_letter(x+1)}1'].font = Font(bold=True)
         if not options.quiet:
             print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
 
