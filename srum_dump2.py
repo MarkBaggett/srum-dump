@@ -1,4 +1,5 @@
-from openpyxl.cell import WriteOnlyCell
+from openpyxl.cell import WriteOnlyCell, Cell
+from openpyxl.styles import Font
 from Registry import Registry
 from datetime import datetime,timedelta
 import pyesedb
@@ -334,21 +335,24 @@ def process_srum(ese_db, target_wb ):
 
         xls_sheet = target_wb.create_sheet(title=tname)
 
+        column_names = [x.name for x in ese_table.columns]
+        column_widths = [len(x.name)+2 for x in ese_table.columns]
+
         header_row = [x.name for x in ese_table.columns]
         if ese_table.name in template_tables:
             tname,tfields = template_tables.get(ese_table.name)
             header_row = []
-            for eachcol in ese_table.columns:
+            for i, eachcol in enumerate(ese_table.columns):
                 if eachcol.name in tfields:
                     cell_style, _, cell_value = tfields.get(eachcol.name)
                     new_cell = WriteOnlyCell(xls_sheet, value=cell_value)
                     new_cell.style = cell_style
                     header_row.append( new_cell )
+                    column_widths[i] = len(str(cell_value)) + 2
                 else:
                     header_row.append(WriteOnlyCell(xls_sheet, value=eachcol.name))
         xls_sheet.append(header_row)
     
-        column_names = [x.name for x in ese_table.columns]
         for row_num in range(ese_table.number_of_records):
             try:
                 ese_row = ese_table.get_record(row_num)
@@ -373,10 +377,31 @@ def process_srum(ese_db, target_wb ):
                     tname,tfields = template_tables.get(ese_table.name) 
                     if column_names[col_num] in tfields:
                         cstyle, cformat, _ = tfields.get(column_names[col_num])
-                        val = format_output(val, cformat, cstyle,xls_sheet)              
+                        val = format_output(val, cformat, cstyle,xls_sheet)
+                val_len = len(str(val.value)) if isinstance(val, Cell) else len(str(val))
+                if column_widths[col_num] < val_len:
+                    column_widths[col_num] = val_len
                 #print dir(new_cell.style.font)
                 xls_row.append(val)
             xls_sheet.append(xls_row)
+        # Adjust column widths now
+        if ese_table.name in template_tables:
+            tname,tfields = template_tables.get(ese_table.name)
+            counter = 1
+            for i in range(ese_table.number_of_columns):
+                if column_names[i] in tfields:
+                    xls_sheet.column_dimensions[openpyxl.utils.get_column_letter(counter)].width = min(column_widths[i], 80)
+                counter += 1
+        else:
+            for i in range(ese_table.number_of_columns):
+                xls_sheet.column_dimensions[openpyxl.utils.get_column_letter(i+1)].width = min(column_widths[i], 80)
+        # Add AutoFilter
+        xls_sheet.auto_filter.ref = xls_sheet.dimensions
+        # Bold first row
+        for x in range(0, len(header_row)):
+            xls_sheet[f'{openpyxl.utils.get_column_letter(x+1)}1'].font = Font(bold=True)
+        # Freeze first row
+        xls_sheet.freeze_panes = "A2"
         if not options.quiet:
             print("\r|XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX| 100.00% FINISHED")
 
@@ -455,13 +480,13 @@ parser = argparse.ArgumentParser(description="Given an SRUM database it will cre
 parser.add_argument("--SRUM_INFILE","-i", help ="Specify the ESE (.dat) file to analyze. Provide a valid path to the file.")
 parser.add_argument("--XLSX_OUTFILE", "-o", default="SRUM_DUMP_OUTPUT.xlsx", help="Full path to the XLS file that will be created.")
 parser.add_argument("--XLSX_TEMPLATE" ,"-t", help = "The Excel Template that specifies what data to extract from the srum database. You can create template_tables with ese_template.py.")
-parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If a registry hive is provided then the names of the network profiles will be resolved.")
+parser.add_argument("--REG_HIVE", "-r", dest="reghive", help = "If SOFTWARE registry hive is provided then the names of the network profiles will be resolved.")
 parser.add_argument("--quiet", "-q", help = "Supress unneeded output messages.",action="store_true")
 options = parser.parse_args()
 
 ads = itertools.cycle(["Did you know SANS Automating Infosec with Python SEC573 teaches you to develop Forensics and Incident Response tools?",
        "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensic Analysis FOR500.",
-       "Yogesh Khatri's paper at https://files.sans.org/summit/Digital_Forensics_and_Incident_Response_Summit_2015/PDFs/Windows8SRUMForensicsYogeshKhatri.pdf was essential in the creation of this tool.",
+       "Yogesh Khatri's paper at https://github.com/ydkhatri/Presentations/blob/master/SRUM%20Forensics-SANS.DFIR.summit.2015.pdf was essential in the creation of this tool.",
        "By modifying the template file you have control of what ends up in the analyzed results.  Try creating an alternate template and passing it with the --XLSX_TEMPLATE option.",
        "TIP: When using a SOFTWARE registry file you can add your own SIDS to the 'lookup-Known SIDS' tab!",
        "This program was written by Twitter:@markbaggett and @donaldjwilliam5 because @ovie said so.",
