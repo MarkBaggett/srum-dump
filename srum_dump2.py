@@ -506,7 +506,7 @@ if not options.SRUM_INFILE:
     if os.path.exists("SOFTWARE"):
         reg_path = os.path.join(os.getcwd(),"SOFTWARE")
 
-    sg.ChangeLookAndFeel('Kayak')
+    sg.ChangeLookAndFeel('DarkRed2')
     layout = [[sg.Text('REQUIRED: Path to SRUDB.DAT')],
     [sg.Input(srum_path,key="_SRUMPATH_", enable_events=True), sg.FileBrowse(target="_SRUMPATH_")], 
     [sg.Text('REQUIRED: Output folder for SRUM_DUMP_OUTPUT.xlsx')],
@@ -519,7 +519,7 @@ if not options.SRUM_INFILE:
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP 2.4', layout)
+    window = sg.Window('SRUM_DUMP 2.5', layout)
 
     while True:             
         event, values = window.Read()
