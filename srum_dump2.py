@@ -22,6 +22,7 @@ import tempfile
 import urllib.request
 import subprocess
 import ctypes
+import time
 
 
 def BinarySIDtoStringSID(sid_str):
@@ -155,7 +156,11 @@ def load_srumid_lookups(database):
     id_lookup = {}
     #Note columns  0 = Type, 1 = Index, 2 = Value
     lookup_table = database.get_table_by_name('SruDbIdMapTable')
-    column_lookup = dict([(x.name,index) for index,x in enumerate(lookup_table.columns)]) 
+    column_lookup = dict([(x.name,index) for index,x in enumerate(lookup_table.columns)])
+    num_lookups = ese_table_record_count(lookup_table)
+    if not num_lookups:
+        print(f"\nUnexpectedly. The number of records in the lookup table is zero.")
+        return ""
     for rec_entry_num in range(lookup_table.number_of_records):
         bin_blob = smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdBlob'])
         if smart_retrieve(lookup_table,rec_entry_num, column_lookup['IdType'])==3:
@@ -314,23 +319,72 @@ def format_output(val, eachformat, eachstyle, xls_sheet):
         new_cell.value = re.sub(r'[\000-\010]|[\013-\014]|[\016-\037]|[\x00-\x1f\x7f-\x9f]|[\uffff]',"",val)
     return new_cell
 
+def ese_table_guid_to_name(ese_table):
+    if ese_table.name in template_tables:
+        tname,tfields = template_tables.get(ese_table.name)
+    else:
+        tname = ese_table.get_name()
+    return tname
+
+def ese_table_get_record(ese_table, row_num):
+    retry = 5
+    if row_num >= ese_table_record_count(ese_table):
+        return None
+    while retry:
+        try:
+            ese_row = ese_table.get_record(row_num)
+        except Exception as e:
+            retry -= 1
+            time.sleep(0.1)
+            error = e
+        else:
+            break
+    else:
+        tname = ese_table_guid_to_name(ese_table)
+        print("Skipping corrupt row {0} in the {1} table. Because {2}".format(row_num, tname, str(error)))
+        ese_row = None
+    return ese_row
+
+def ese_table_record_count(ese_table):
+    retry = 5
+    while retry:
+        try:
+            total_recs = ese_table.get_number_of_records()
+        except:
+            retry -= 1
+            time.sleep(0.1)
+        else:
+            break
+    else:
+        tname = ese_table_guid_to_name(x)
+        print(f"Table {tname} has an invalid number of records. {str(total_recs)}")
+        total_recs = 0
+    return total_recs
+
 
 def process_srum(ese_db, target_wb ):
     """Process all the tables and columns in the ESE database"""
-    total_recs = sum([x.number_of_records for x in ese_db.tables if x.name not in skip_tables])
+    total_recs = 0
+    for each_table in  ese_db.tables:
+        if each_table.name in skip_tables:
+            continue
+        total_recs += ese_table_record_count(each_table)
+
     if not options.quiet:
         print("Processing {} records across {} tables".format(total_recs,ese_db.number_of_tables-len(skip_tables)))
     for table_num in range(ese_db.number_of_tables):
         ese_table = ese_db.get_table(table_num)
         if ese_table.name in skip_tables:
             continue
-        if ese_table.name in template_tables:
-            tname,tfields = template_tables.get(ese_table.name)
-        else:
-            tname = ese_table.name[1:15]
+
+        tname = ese_table_guid_to_name(ese_table)
+        num_recs = ese_table_record_count(ese_table)
+        if not num_recs:
+            print(f"\nSkipping table with zero of records. {tname}")
+            continue
 
         if not options.quiet:
-            print("\nNow dumping table {} containing {} rows".format(tname, ese_table.number_of_records))
+            print("\nNow dumping table {} containing {} rows".format(tname, num_recs or "Unknown"))
             print("While you wait, did you know ...\n {} \n".format(next(ads)))
 
         xls_sheet = target_wb.create_sheet(title=tname)
@@ -353,17 +407,14 @@ def process_srum(ese_db, target_wb ):
                     header_row.append(WriteOnlyCell(xls_sheet, value=eachcol.name))
         xls_sheet.append(header_row)
     
-        for row_num in range(ese_table.number_of_records):
-            try:
-                ese_row = ese_table.get_record(row_num)
-            except Exception as e:
-                print("Skipping corrupt row {0} in the {1} table. Because {2}".format(row_num, ese_table.name, str(e)))
-                continue
+        for row_num in range(num_recs):
+            
+            ese_row = ese_table_get_record(ese_table,row_num)
             if ese_row == None:
                 continue
 
             if not options.quiet and row_num % 500 == 0:
-                 print("\r|{0:-<50}| {1:3.2f}%".format("X"*( 50 * row_num//ese_table.number_of_records), 100*row_num/ese_table.number_of_records ),end="")
+                 print("\r|{0:-<50}| {1:3.2f}%".format("X"*( 50 * row_num//num_recs), 100*row_num/num_recs ),end="")
 
                 #The row is retrieved now use the template to figure out which ones you want and format them
             xls_row = []
@@ -519,7 +570,7 @@ if not options.SRUM_INFILE:
     [sg.OK(), sg.Cancel()]] 
     
     # Create the Window
-    window = sg.Window('SRUM_DUMP 2.5', layout)
+    window = sg.Window('SRUM_DUMP 2.6', layout)
 
     while True:             
         event, values = window.Read()
