@@ -1,6 +1,10 @@
 from pathlib import Path
 import csv
+import logging
 
+# --- Logger Setup ---
+logger = logging.getLogger(f"srum_dump.{__name__}")
+# --- End Logger Setup ---
 
 class OutputCSV:
     """
@@ -18,6 +22,7 @@ class OutputCSV:
         :return: The Path object representing the workbook directory.
         """
         self.path = path
+        logger.info(f"Creating csv output folder {path}")
         if not path.exists():
             path.mkdir(parents=True)
         return path
@@ -40,6 +45,7 @@ class OutputCSV:
             return self
 
         def new_entry(self, entry: list):
+            logger.debug(f"New row {str(entry)}")
             self.writer.writerow(entry)
 
         def __exit__(self, exc_type, exc_val, exc_tb):
@@ -57,6 +63,7 @@ class OutputCSV:
         :return: A context manager for the CSV worksheet.
         """
         file_path = workbook / f"{worksheet_name}.csv"
+        logger.info(f"Creating new csv {file_path} with columns {column_headers}")
         return self.CSVWorksheetContext(file_path, column_headers)
 
     def new_entry(self, worksheet, entry: list, format_list:list = []):

@@ -4,11 +4,19 @@ import struct
 import codecs
 import uuid
 import time
+import logging
+import warnings
+
+# --- Logger Setup ---
+# Note: Using class name directly here as it's the primary component
+logger = logging.getLogger(f"srum_dump.db_ese")
+# --- End Logger Setup ---
 
 from pyesedb import table
-
 from helpers import blob_to_string, BinarySIDtoStringSID, known_tables, skip_tables
 from helpers import ole_timestamp
+
+warnings.simplefilter("ignore")
 
 class PyesedbTableWrapper:
     def __init__(self, table_instance):
@@ -24,7 +32,9 @@ class PyesedbTableWrapper:
         while time.time() - start < 1.5:
             try:
                 result = self.table.number_of_records
+                logger.debug(f".get_number_of_records result={result}")
             except Exception as e:
+                logger.debug(f".get_number_of_records raised an error {str(e)}. Retrying.")
                 time.sleep(0.01)
                 pass
             else:
@@ -32,11 +42,14 @@ class PyesedbTableWrapper:
         raise e
     
     def get_record(self, *args, **kwargs):
+        logger.debug(f".get_record {str(args)} {str(kwargs)}")
         start = time.time()
         while time.time() - start < 1.5:
             try:
                 result = self.table.get_record(*args,**kwargs)
+                logger.debug(f".get_record result = {result}")
             except Exception as e:
+                logger.exception(f"Exception reading record {str(e)} retrying.")
                 time.sleep(0.01)
                 pass
             else:
@@ -62,6 +75,7 @@ class PyesedbRecordWrapper:
 
     def value(self, column_name):
         """Return the value of the specified column."""
+        logger.debug(f".value({column_name}) called")
         try:
             column_index = self.column_names.index(column_name)
             col_data = self.record.get_value_data(column_index)
@@ -107,9 +121,11 @@ class PyesedbRecordWrapper:
                 col_data = blob_to_string(col_data)    
             if col_data==None or col_data=='':
                 col_data = "Empty"
+            logger.debug(f".value result = {col_data}.")
             return col_data
-        except ValueError:
-            raise ValueError(f"Column '{column_name}' not found in record")
+        except Exception as e:
+            logger.exception(f"Exception processing value {str(e)}")
+
 
     def __str__(self):
         """Provide a string representation of the record."""
@@ -131,13 +147,15 @@ class srum_database(object):
 
     def connect(self):
         """Establish a connection to the ESE database."""
+        logger.debug(f".connect() to {self.db_path}")
         if not self.db_path.is_file():
             raise ValueError("The specified file path does not exist")
         try:
             self.db = pyesedb.file()
             self.db.open(str(self.db_path))
         except Exception as e:
-            raise Exception(f"Error connecting to database: {e}")
+            logger.exception(f"Error connecting to database: {e}")
+
         
     def close(self):
         """Close the database connection."""
@@ -147,6 +165,7 @@ class srum_database(object):
 
     def get_tables(self):
         """Yield table names one at a time from the database."""
+        logger.debug(f".get_tables() called")
         if not self.db:
             raise Exception("Database not connected. Call connect() first.")
         table_count = self.db.get_number_of_tables()
@@ -155,6 +174,7 @@ class srum_database(object):
 
     def get_table(self, table_name):
         """Return the table object for the specified table name."""
+        logger.debug(f".get_table({table_name}) called")
         if not self.db:
             raise Exception("Database not connected. Call connect() first.")
         try:
@@ -163,11 +183,12 @@ class srum_database(object):
             tbl.column_types = [col.type for col in tbl.table.columns]
             return tbl
         except Exception as e:
-            raise Exception(f"Error retrieving table {table_name}: {e}")
+            logger.exception(f"Error retrieving table {table_name}: {e}")
         
 
     def get_records(self, table_name):
         """Yield records one at a time from the specified table."""
+        logger.debug(f".get_records({table_name}) called")
         table = self.get_table(table_name)
         if not table:
             raise Exception(f"Table {table_name} not found.")
@@ -175,17 +196,18 @@ class srum_database(object):
         try:
             num_records = table.get_number_of_records()
         except Exception as e:
+            logger.exception(f"Exception getting number of records {table_name} {str(e)}")
             num_records = 0
-            print(f"Error retrieving number of records from {table_name}: {e}")
         
         try:
             for i in range(num_records):
                 yield PyesedbRecordWrapper(table.get_record(i), table)
         except Exception as e:
-            raise Exception(f"Error retrieving records from {table_name}: {e}")
+            logger.exception(f"get_records({table_name}) raised error: {str(e)}")
 
     def load_srumid_lookups(self):
         """loads the SRUMID numbers from the SRUM database"""
+        logger.debug("Loading SRUMID table.")
         lookups = self.config.get_config("known_sids")
         for rec_entry in self.get_records('SruDbIdMapTable'):
             IdType = int.from_bytes(rec_entry.record.get_value_data(0),"little") #IdType
@@ -196,7 +218,6 @@ class srum_database(object):
             else:
                 IdBlob = blob_to_string(IdBlob)
             self.id_lookup[str(IdIndex)] = IdBlob
-
 
 
 # Example usage with generators

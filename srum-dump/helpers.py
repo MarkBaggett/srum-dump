@@ -7,9 +7,23 @@ import subprocess
 import codecs
 import re
 import itertools
+import logging # Added for logging
 
 from datetime import datetime, timezone, timedelta
 from Registry import Registry
+
+# --- Logger Setup ---
+# Get a logger for this module
+logger = logging.getLogger(f"srum_dump.helpers")
+# --- End Logger Setup ---
+
+
+manager = logging.Logger.manager.loggerDict
+logger.debug(f"{'*'*1000}")
+for n,l in manager.items(): 
+    if not isinstance(l, logging.PlaceHolder):
+        logger.debug(f"{n},{l.level},{l.handlers},{l.propagate}")
+logger.debug(f"{'*'*1000}")
 
 
 skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable', 'SruDbCheckpointTable']
@@ -275,10 +289,15 @@ ads = itertools.cycle([
 ])
 
 def column_friendly_names( original_name):
-    #Returns renamed column or original if it was not in the config
-    return columns_to_rename.get( original_name, original_name)
+    """Returns renamed column or original if it was not in the config"""
+    logger.debug(f"Called column_friendly_names with original_name: {original_name}")
+    result = columns_to_rename.get( original_name, original_name)
+    logger.debug(f"Returning friendly name: {result}")
+    return result
 
 def BinarySIDtoStringSID(sid_str, sid_lookups=None):
+    """Converts a binary SID to its string representation."""
+    logger.debug(f"Called BinarySIDtoStringSID with sid_str length: {len(sid_str) if sid_str else 0}, sid_lookups: {'Provided' if sid_lookups else 'Default'}")
     #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
     """Converts a binary SID to its string representation.
      https://msdn.microsoft.com/en-us/library/windows/desktop/aa379597.aspx
@@ -297,199 +316,530 @@ def BinarySIDtoStringSID(sid_str, sid_lookups=None):
     Raises:
       ValueError: If the binary SID is malformed.
     """
-    if not sid_str or sid_str == 'Empty':
-        return ""
-    if sid_lookups == None:
-        sid_lookups = known_sids
-    sid = sid_str
-    #sid = codecs.decode(sid_str,"hex")
-    str_sid_components = [sid[0]]
-    # Now decode the 48-byte portion
-    if len(sid) >= 8:
-        subauthority_count = sid[1]
-        identifier_authority = struct.unpack(">H", sid[2:4])[0]
-        identifier_authority <<= 32
-        identifier_authority |= struct.unpack(">L", sid[4:8])[0]
-        str_sid_components.append(identifier_authority)
-        start = 8
-        for i in range(subauthority_count):
-            authority = sid[start:start + 4]
-            if not authority:
-                break
-            if len(authority) < 4:
-                raise ValueError("In binary SID '%s', component %d has been truncated. "
-                         "Expected 4 bytes, found %d: (%s)",
-                         ",".join([str(ord(c)) for c in sid]), i,
-                         len(authority), authority)
-            str_sid_components.append(struct.unpack("<L", authority)[0])
-            start += 4
-            sid_str = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
-    sid_name = sid_lookups.get(sid_str,'unknown')
-    return "{} ({})".format(sid_str,sid_name)
+    sid_string_representation = "" # Initialize
+    sid_name = 'unknown'
+    try:
+        if not sid_str or sid_str == 'Empty':
+            logger.debug("sid_str is empty, returning empty string.")
+            return ""
+        if sid_lookups is None:
+            logger.debug("Using default known_sids for lookup.")
+            sid_lookups = known_sids
+        sid = sid_str # Assuming sid_str is already bytes
+        str_sid_components = [sid[0]] # Revision
+
+        # Now decode the 48-byte portion (Authority + Subauthorities)
+        if len(sid) >= 8:
+            subauthority_count = sid[1]
+            # Authority (6 bytes, big-endian)
+            identifier_authority = struct.unpack(">H", sid[2:4])[0] # First 2 bytes
+            identifier_authority <<= 32
+            identifier_authority |= struct.unpack(">L", sid[4:8])[0] # Last 4 bytes
+            str_sid_components.append(identifier_authority)
+
+            # Subauthorities (4 bytes each, little-endian)
+            start = 8
+            for i in range(subauthority_count):
+                authority = sid[start:start + 4]
+                if not authority:
+                    logger.warning(f"SID component {i} is missing.")
+                    break
+                if len(authority) < 4:
+                    err_msg = (f"In binary SID, component {i} has been truncated. "
+                               f"Expected 4 bytes, found {len(authority)}: ({authority})")
+                    logger.error(err_msg)
+                    raise ValueError(err_msg)
+                str_sid_components.append(struct.unpack("<L", authority)[0])
+                start += 4
+
+            # Construct the string representation (only if components were added)
+            if len(str_sid_components) > 1:
+                 sid_string_representation = "S-%s" % ("-".join([str(x) for x in str_sid_components]))
+                 sid_name = sid_lookups.get(sid_string_representation, 'unknown')
+
+        else:
+             logger.warning(f"SID length ({len(sid)}) is less than 8 bytes, cannot decode authority/subauthorities.")
+             # Attempt to use the raw input as the key if it's short
+             sid_string_representation = str(sid_str) # Fallback
+             sid_name = sid_lookups.get(sid_string_representation, 'unknown')
+
+
+        result = "{} ({})".format(sid_string_representation, sid_name)
+        logger.debug(f"Successfully converted SID to: {result}")
+        return result
+
+    except Exception as e:
+        logger.exception(f"Error converting binary SID: {e}")
+        return f"Error converting SID: {sid_str}"
+
 
 def blob_to_string(binblob):
     """Takes in a binary blob hex characters and does its best to convert it to a readable string.
        Works great for UTF-16 LE, UTF-16 BE, ASCII like data. Otherwise return it as hex.
     """
-    if isinstance(binblob, str):
-        binblob = b"\x00" + binblob.encode()   
+    logger.debug(f"Called blob_to_string with binblob type: {type(binblob)}, length: {len(binblob) if hasattr(binblob, '__len__') else 'N/A'}")
+    
+    if not binblob:  #Easy-peazy.. if binblob blank
+       return ""
+    
+    result_blob = binblob # Default to original if conversion fails
     try:
-        chrblob = codecs.decode(binblob,"hex")
-    except:
-        chrblob = binblob
-    try:
-        if re.match(b'^(?:[^\x00]\x00)+', chrblob):
+        if isinstance(binblob, str):
+            logger.debug("Input is string, encoding with null byte prefix.")
+            binblob = b"\x00" + binblob.encode()
+
+        # Attempt to decode from hex if it looks like hex
+        try:
+            # Basic check if it looks like hex (even length, hex chars)
+            if binblob and len(binblob) % 2 == 0 and all(c in b'0123456789abcdefABCDEF' for c in binblob):
+                 chrblob = codecs.decode(binblob, "hex")
+                 logger.debug("Decoded binblob from hex.")
+            else:
+                 chrblob = binblob
+                 logger.debug("Input doesn't look like hex, treating as raw bytes.")
+        except Exception as hex_decode_error:
+            logger.exception(f"Failed to decode binblob from hex, treating as raw bytes: {hex_decode_error}")
+            chrblob = binblob # Fallback to original bytes
+
+        # Attempt string decoding
+        decoded = False
+        if re.match(b'^(?:[^\x00]\x00)+', chrblob): # UTF-16 LE pattern
             try:
-                binblob = chrblob.decode("utf-16-le").strip("\x00")
-            except:
-                pass
-        elif re.match(b'^(?:\x00[^\x00])+', chrblob):
+                result_blob = chrblob.decode("utf-16-le").strip("\x00")
+                logger.debug("Decoded as UTF-16 LE.")
+                decoded = True
+            except Exception as utf16le_error:
+                logger.exception(f"Potential UTF-16 LE pattern detected, but decoding failed: {utf16le_error}")
+        elif re.match(b'^(?:\x00[^\x00])+', chrblob): # UTF-16 BE pattern
             try:
-                binblob = chrblob.decode("utf-16-be").strip("\x00")
-            except:
-                pass
-        else:
-            binblob = chrblob.decode("latin1").strip("\x00")
-    except:
-        binblob = "" if not binblob else codecs.decode(binblob,"latin-1")
-    return binblob
+                result_blob = chrblob.decode("utf-16-be").strip("\x00")
+                logger.debug("Decoded as UTF-16 BE.")
+                decoded = True
+            except Exception as utf16be_error:
+                logger.exception(f"Potential UTF-16 BE pattern detected, but decoding failed: {utf16be_error}")
+
+        if not decoded: # Try latin1 as a fallback if not UTF-16
+            try:
+                result_blob = chrblob.decode("latin1").strip("\x00")
+                logger.debug("Decoded as latin1.")
+            except Exception as latin1_error:
+                logger.exception(f"Failed to decode as latin1: {latin1_error}. Falling back to hex representation of original bytes.")
+                # Final fallback: return hex representation of original bytes if all decoding fails
+                result_blob = binblob.hex() if isinstance(binblob, bytes) else str(binblob)
+
+    except Exception as e:
+        logger.exception(f"Error in blob_to_string: {e}")
+        # Ensure we return something, preferably hex of original if possible
+        try:
+            result_blob = binblob.hex() if isinstance(binblob, bytes) else str(binblob)
+        except:
+            result_blob = str(binblob) # Absolute fallback
+
+    logger.debug(f"Returning blob as string: {result_blob[:100]}...") # Log truncated result
+    return result_blob
+
 
 def ole_timestamp(binblob):
     """converts a hex encoded OLE time stamp to a time string"""
+    logger.debug(f"Called ole_timestamp with binblob type: {type(binblob)}")
+    """converts a hex encoded OLE time stamp to a time string"""
     if isinstance(binblob, datetime):
+        logger.debug("Input is already datetime object, returning directly.")
         return binblob
+    dt = f"Invalid OLE Timestamp: {binblob}" # Default error message
     try:
-        td,ts = str(struct.unpack("<d",binblob)[0]).split(".")
-        dt = datetime(1899,12,30,0,0,0) + timedelta(days=int(td),seconds=86400 * float("0.{}".format(ts)))
+        # Ensure binblob is bytes and has the correct length (8 bytes for double)
+        if isinstance(binblob, bytes) and len(binblob) == 8:
+            ole_float = struct.unpack("<d", binblob)[0]
+            td, ts_part = str(ole_float).split(".")
+            # Handle potential precision issues with float conversion
+            ts_float = float("0." + ts_part)
+            # Calculate seconds carefully
+            seconds_part = round(86400 * ts_float) # Round to nearest second
+            dt = datetime(1899, 12, 30, 0, 0, 0) + timedelta(days=int(td), seconds=seconds_part)
+            logger.debug(f"Successfully converted OLE timestamp to: {dt}")
+        else:
+             logger.warning(f"Input binblob is not 8 bytes or not bytes type: type={type(binblob)}, len={len(binblob) if hasattr(binblob, '__len__') else 'N/A'}")
+             dt = f"Invalid input for OLE timestamp (expected 8 bytes): {binblob}"
+
     except Exception as e:
-        dt = "This field is incorrectly identified as an OLE timestamp in the template."
+        logger.exception(f"Error converting OLE timestamp: {e}. Input was: {binblob}")
+        dt = f"Conversion Error: {e}" # More specific error
     return dt
 
- 
+
 def file_timestamp(binblob):
     """converts a hex encoded windows file time stamp to a time string"""
+    logger.debug(f"Called file_timestamp with binblob: {binblob}")
+    """converts a hex encoded windows file time stamp to a time string"""
+    dt = f"Invalid FILETIME: {binblob}" # Default error message
     try:
-        dt = datetime(1601,1,1,0,0,0) + timedelta(microseconds=binblob/10)
-    except:
-        dt = "This field is incorrectly identified as a file timestamp in the template"
+        # FILETIME is a 64-bit integer (microseconds / 10 since 1601-01-01)
+        if isinstance(binblob, int):
+            # Ensure it's a plausible value (e.g., positive)
+            if binblob >= 0:
+                dt = datetime(1601, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(microseconds=binblob / 10)
+                # Convert to local time if needed, or keep as UTC
+                # dt = dt.astimezone() # Example: convert to local timezone
+                logger.debug(f"Successfully converted FILETIME timestamp to: {dt}")
+            else:
+                logger.warning(f"Input binblob is negative: {binblob}")
+                dt = f"Invalid FILETIME (negative value): {binblob}"
+        else:
+            logger.warning(f"Input binblob is not an integer: type={type(binblob)}")
+            dt = f"Invalid input for FILETIME (expected int): {binblob}"
+    except Exception as e:
+        logger.exception(f"Error converting FILETIME timestamp: {e}. Input was: {binblob}")
+        dt = f"Conversion Error: {e}"
     return dt
 
 def load_registry_sids(reg_file):
+    """Given Software hive find SID usernames"""
+    logger.debug(f"Called load_registry_sids with reg_file: {reg_file}")
     """Given Software hive find SID usernames"""
     sids = {}
     profile_key = r"Microsoft\Windows NT\CurrentVersion\ProfileList"
     tgt_value = "ProfileImagePath"
     try:
+        logger.debug(f"Attempting to open registry file: {reg_file}")
         reg_handle = Registry.Registry(reg_file)
+        logger.debug(f"Attempting to open key: {profile_key}")
         key_handle = reg_handle.open(profile_key)
+        logger.debug(f"Iterating through subkeys of {profile_key}")
         for eachsid in key_handle.subkeys():
-            sids_path = eachsid.value(tgt_value).value()
-            sids[eachsid.name()] = sids_path.split("\\")[-1]
-    except:
+            try:
+                sid_name = eachsid.name()
+                logger.debug(f"Processing SID key: {sid_name}")
+                profile_path_value = eachsid.value(tgt_value)
+                sids_path = profile_path_value.value()
+                username = sids_path.split("\\")[-1]
+                sids[sid_name] = username
+                logger.debug(f"Found SID: {sid_name} -> User: {username}")
+            except Registry.RegistryValueNotFoundException:
+                logger.warning(f"Value '{tgt_value}' not found for SID {sid_name}")
+            except Exception as sid_ex:
+                 logger.exception(f"Error processing SID subkey {eachsid.name()}: {sid_ex}")
+    except Registry.RegistryKeyNotFoundException:
+        logger.exception(f"Registry key '{profile_key}' not found in {reg_file}.")
         return {}
+    except Exception as e:
+        logger.exception(f"Failed to load registry SIDs from {reg_file}: {e}")
+        return {}
+
+    logger.debug(f"Finished loading registry SIDs. Found {len(sids)} SIDs.")
     return sids
 
 def load_interfaces(reg_file):
     """Loads the names of the wireless networks from the software registry hive"""
+    logger.debug(f"Called load_interfaces with reg_file: {reg_file}")
+    """Loads the names of the wireless networks from the software registry hive"""
+    profile_lookup = {}
     try:
+        logger.debug(f"Attempting to open registry file: {reg_file}")
         reg_handle = Registry.Registry(reg_file)
     except Exception as e:
-        print(r"I could not open the specified SOFTWARE registry key. It is usually located in \Windows\system32\config.  This is an optional value.  If you cant find it just dont provide one.")
-        print(("WARNING : ", str(e)))
+        # Keep original print statements but also log
+        err_msg = f"Could not open the specified SOFTWARE registry key: {reg_file}. It is usually located in \\Windows\\system32\\config. This is an optional value."
+        print(err_msg)
+        print(f"WARNING : {str(e)}")
+        logger.exception(err_msg + f" Error: {e}")
         return {}
+
     try:
-        int_keys = reg_handle.open('Microsoft\\WlanSvc\\Interfaces')
+        interfaces_key_path = 'Microsoft\\WlanSvc\\Interfaces'
+        logger.debug(f"Attempting to open key: {interfaces_key_path}")
+        int_keys = reg_handle.open(interfaces_key_path)
+    except Registry.RegistryKeyNotFoundException:
+         warn_msg = "Wireless interfaces key ('Microsoft\\WlanSvc\\Interfaces') not found in this registry file."
+         logger.warning(warn_msg)
+         return {}
     except Exception as e:
-        print("There doesn't appear to be any wireless interfaces in this registry file.")
-        print(("WARNING : ", str(e)))
+        err_msg = "Error opening wireless interfaces key."
+        logger.exception(err_msg + f" Error: {e}")
         return {}
-    profile_lookup = {}
+
+    logger.debug("Iterating through interface subkeys.")
     for eachinterface in int_keys.subkeys():
-        if len(eachinterface.subkeys())==0:
-            continue
-        for eachprofile in eachinterface.subkey("Profiles").subkeys():
-            profileid = [x.value() for x in list(eachprofile.values()) if x.name()=="ProfileIndex"][0]
-            metadata = list(eachprofile.subkey("MetaData").values())
-            for eachvalue in metadata:
-                if eachvalue.name() in ["Channel Hints", "Band Channel Hints"]:
-                    channelhintraw = eachvalue.value()
-                    hintlength = struct.unpack("I", channelhintraw[0:4])[0]
-                    name = channelhintraw[4:hintlength+4] 
-                    profile_lookup[str(profileid)] = name.decode(encoding="latin1")
+        interface_name = eachinterface.name()
+        logger.debug(f"Processing interface: {interface_name}")
+        try:
+            profiles_key = eachinterface.subkey("Profiles")
+            logger.debug(f"Processing 'Profiles' subkey for interface {interface_name}")
+            for eachprofile in profiles_key.subkeys():
+                profile_name = eachprofile.name()
+                logger.debug(f"Processing profile: {profile_name}")
+                try:
+                    # Find ProfileIndex
+                    profileid_values = [x.value() for x in list(eachprofile.values()) if x.name() == "ProfileIndex"]
+                    if not profileid_values:
+                        logger.warning(f"'ProfileIndex' not found for profile {profile_name} under interface {interface_name}")
+                        continue
+                    profileid = profileid_values[0]
+                    logger.debug(f"Found ProfileIndex: {profileid}")
+
+                    # Look for network name in MetaData
+                    metadata_key = eachprofile.subkey("MetaData")
+                    metadata_values = list(metadata_key.values())
+                    network_name = None
+                    for eachvalue in metadata_values:
+                        # Adjusting logic slightly - often the name is in 'Description' or similar, not just hints
+                        # Let's prioritize Description, then fall back to hints or other likely fields
+                        # This part might need refinement based on actual registry structures observed
+                        if eachvalue.name() == "Description": # Check common fields first
+                             network_name = eachvalue.value()
+                             logger.debug(f"Found network name in 'Description': {network_name}")
+                             break
+                        elif eachvalue.name() in ["Channel Hints", "Band Channel Hints"]: # Fallback to hints
+                            channelhintraw = eachvalue.value()
+                            if isinstance(channelhintraw, bytes) and len(channelhintraw) > 4:
+                                hintlength = struct.unpack("<I", channelhintraw[0:4])[0] # Assuming Little Endian length
+                                # Check if length is plausible
+                                if 4 + hintlength <= len(channelhintraw):
+                                     name_bytes = channelhintraw[4:hintlength + 4]
+                                     try:
+                                         # Try decoding common encodings
+                                         network_name = name_bytes.decode("utf-8").rstrip('\x00')
+                                     except UnicodeDecodeError:
+                                         try:
+                                             network_name = name_bytes.decode("latin1").rstrip('\x00')
+                                         except Exception as decode_err:
+                                             logger.warning(f"Could not decode network name from hints for profile {profile_name}: {decode_err}")
+                                             network_name = f"Undecoded_{profileid}" # Placeholder
+                                     logger.debug(f"Found network name in '{eachvalue.name()}': {network_name}")
+                                     break # Found name, stop searching metadata
+                                else:
+                                     logger.warning(f"Implausible length ({hintlength}) in '{eachvalue.name()}' for profile {profile_name}")
+                            else:
+                                logger.warning(f"'{eachvalue.name()}' value is not bytes or too short for profile {profile_name}")
+
+                    if network_name:
+                        profile_lookup[str(profileid)] = network_name
+                        logger.info(f"Mapped Profile ID {profileid} to Network Name '{network_name}'")
+                    else:
+                        logger.warning(f"Could not determine network name for Profile ID {profileid} under interface {interface_name}")
+
+                except Registry.RegistryKeyNotFoundException as profile_ex:
+                    logger.warning(f"Subkey 'MetaData' or value 'ProfileIndex' not found for profile {profile_name}: {profile_ex}")
+                except Exception as profile_ex:
+                    logger.exception(f"Error processing profile {profile_name} under interface {interface_name}: {profile_ex}")
+
+        except Registry.RegistryKeyNotFoundException:
+            logger.warning(f"Subkey 'Profiles' not found for interface {interface_name}")
+        except Exception as interface_ex:
+            logger.exception(f"Error processing interface {interface_name}: {interface_ex}")
+
+    logger.debug(f"Finished loading interfaces. Found {len(profile_lookup)} profiles.")
     return profile_lookup
 
 def load_template_lookups(template_workbook):
     """Load any tabs named lookup-xyz form the template file for lookups of columns with the same format type"""
+    logger.debug("Called load_template_lookups")
+    """Load any tabs named lookup-xyz form the template file for lookups of columns with the same format type"""
     template_lookups = {}
-    for each_sheet in template_workbook.get_sheet_names():
-        if each_sheet.lower().startswith("lookup-"):
-            lookupname = each_sheet.split("-")[1]
-            template_sheet = template_workbook.get_sheet_by_name(each_sheet)
-            lookup_table = {}
-            for eachrow in range(1,template_sheet.max_row+1):
-                value = template_sheet.cell(row = eachrow, column = 1).value
-                description = template_sheet.cell(row = eachrow, column = 2).value
-                lookup_table[value] = description
-            template_lookups[lookupname] = lookup_table
+    try:
+        sheet_names = template_workbook.sheetnames # Use .sheetnames for openpyxl >= 2.4
+        logger.debug(f"Found sheets: {sheet_names}")
+        for each_sheet_name in sheet_names:
+            if each_sheet_name.lower().startswith("lookup-"):
+                lookupname = each_sheet_name.split("-", 1)[1] # Split only once
+                logger.debug(f"Processing lookup sheet: {each_sheet_name} for lookup name: {lookupname}")
+                template_sheet = template_workbook[each_sheet_name] # Access sheet by name
+                lookup_table = {}
+                # Iterate through rows, skipping header if necessary (assuming header is row 1)
+                for eachrow in range(1, template_sheet.max_row + 1):
+                    try:
+                        value = template_sheet.cell(row=eachrow, column=1).value
+                        description = template_sheet.cell(row=eachrow, column=2).value
+                        if value is not None: # Only add if value is not None
+                            lookup_table[value] = description
+                            # logger.debug(f"Added lookup: {value} -> {description}") # Can be verbose
+                        else:
+                            logger.warning(f"Skipping row {eachrow} in sheet {each_sheet_name} due to None value in column 1.")
+                    except Exception as row_ex:
+                        logger.exception(f"Error processing row {eachrow} in sheet {each_sheet_name}: {row_ex}")
+                template_lookups[lookupname] = lookup_table
+                logger.info(f"Loaded {len(lookup_table)} entries for lookup '{lookupname}'")
+    except Exception as e:
+        logger.exception(f"Error loading template lookups: {e}")
+
+    logger.debug(f"Finished loading template lookups. Found {len(template_lookups)} lookup tables.")
     return template_lookups
-    
+
 def load_template_tables(template_workbook):
     """Load template tabs that define the field names and formats for tables found in SRUM"""
-    template_tables = {}    
-    sheets = template_workbook.get_sheet_names()
-    for each_sheet in sheets:
-        #open the first sheet in the template
-        template_sheet = template_workbook.get_sheet_by_name(each_sheet)
-        #retieve the name of the ESE table to populate the sheet with from A1
-        ese_template_table = template_sheet.cell(row=1,column=1).value
-        #retrieve the names of the ESE table columns and cell styles from row 2 and format commands from row 3 
-        template_field = {}
-        #Read the first Row B & C in the template into lists so we know what data we are to extract
-        for eachcolumn in range(1,template_sheet.max_column+1):
-            field_name = template_sheet.cell(row = 2, column = eachcolumn).value
-            if field_name == None:
-                break
-            template_style = template_sheet.cell(row = 4, column = eachcolumn).style
-            template_format = template_sheet.cell(row = 3, column = eachcolumn).value
-            template_value = template_sheet.cell(row = 4, column = eachcolumn ).value
-            if not template_value:
-                template_value= field_name
-            template_field[field_name] = (template_style,template_format,template_value)
-        template_tables[ese_template_table] = (each_sheet, template_field)
-    return template_tables  
+    logger.debug("Called load_template_tables")
+    """Load template tabs that define the field names and formats for tables found in SRUM"""
+    template_tables = {}
+    try:
+        sheets = template_workbook.sheetnames # Use .sheetnames
+        logger.debug(f"Found sheets: {sheets}")
+        for each_sheet_name in sheets:
+            # Skip lookup sheets
+            if each_sheet_name.lower().startswith("lookup-"):
+                continue
+
+            logger.debug(f"Processing template sheet: {each_sheet_name}")
+            template_sheet = template_workbook[each_sheet_name]
+
+            # Retrieve the name of the ESE table from A1
+            ese_template_table = template_sheet.cell(row=1, column=1).value
+            if not ese_template_table:
+                logger.warning(f"Skipping sheet '{each_sheet_name}' because cell A1 (ESE table name) is empty.")
+                continue
+            logger.debug(f"ESE Table Name from A1: {ese_template_table}")
+
+            # Retrieve column definitions from rows 2, 3, 4
+            template_field = {}
+            logger.debug(f"Reading columns for sheet {each_sheet_name} (max_column: {template_sheet.max_column})")
+            for eachcolumn in range(1, template_sheet.max_column + 1):
+                field_name = template_sheet.cell(row=2, column=eachcolumn).value
+                if field_name is None:
+                    logger.debug(f"Stopping column read at column {eachcolumn} due to None field name.")
+                    break # Stop if we hit an empty column name
+
+                # Get format (row 3), style (row 4), and display value (row 4)
+                template_format = template_sheet.cell(row=3, column=eachcolumn).value
+                template_style = template_sheet.cell(row=4, column=eachcolumn).style # Note: This gets style object, might need adjustment depending on usage
+                template_value = template_sheet.cell(row=4, column=eachcolumn).value
+
+                # Use field_name as display value if template_value is empty
+                display_value = template_value if template_value else field_name
+
+                template_field[field_name] = (template_style, template_format, display_value)
+                # logger.debug(f"  Column {eachcolumn}: Name='{field_name}', Format='{template_format}', Display='{display_value}'") # Can be verbose
+
+            template_tables[ese_template_table] = (each_sheet_name, template_field)
+            logger.info(f"Loaded template for ESE table '{ese_template_table}' from sheet '{each_sheet_name}' with {len(template_field)} columns.")
+
+    except Exception as e:
+        logger.exception(f"Error loading template tables: {e}")
+
+    logger.debug(f"Finished loading template tables. Found {len(template_tables)} table definitions.")
+    return template_tables
 
 def extract_live_file():
+    """Extracts live SRUDB.dat and SOFTWARE hive using esentutl or FGET fallback."""
+    logger.debug("Called extract_live_file")
+    out1 = b"" # Initialize output variables
+    out2 = b""
+    tmp_dir = None # Initialize for finally block
     try:
         tmp_dir = tempfile.mkdtemp()
+        logger.info(f"Created temporary directory: {tmp_dir}")
         fget_file = pathlib.Path(tmp_dir) / "fget.exe"
         registry_file = pathlib.Path(tmp_dir) / "SOFTWARE"
         extracted_srum = pathlib.Path(tmp_dir) / "srudb.dat"
-        esentutl_path = pathlib.Path(os.environ.get("COMSPEC")).parent / "esentutl.exe"
-        if esentutl_path.exists():
-            cmdline = r"{} /y c:\\windows\\system32\\sru\\srudb.dat /vss /d {}".format(str(esentutl_path), str(extracted_srum))
-            phandle = subprocess.Popen(cmdline, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out1, _ = phandle.communicate()
-            cmdline = r"{} /y c:\\windows\\system32\\config\\SOFTWARE /vss /d {}".format(str(esentutl_path), str(registry_file))
-            phandle = subprocess.Popen(cmdline, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out2, _ = phandle.communicate()
+
+        # Prefer esentutl if available
+        comspec = os.environ.get("COMSPEC")
+        esentutl_path = None
+        if comspec:
+             esentutl_path = pathlib.Path(comspec).parent / "esentutl.exe"
+
+        if esentutl_path and esentutl_path.exists():
+            logger.info("Using esentutl.exe for extraction.")
+            # Extract SRUM DB
+            srum_src = r"c:\windows\system32\sru\srudb.dat"
+            cmdline1 = f'"{esentutl_path}" /y "{srum_src}" /vss /d "{extracted_srum}"'
+            logger.debug(f"Executing SRUM extraction command: {cmdline1}")
+            phandle1 = subprocess.Popen(cmdline1, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out1, err1 = phandle1.communicate()
+            logger.debug(f"SRUM extraction stdout: {out1.decode(errors='ignore')}")
+            logger.debug(f"SRUM extraction stderr: {err1.decode(errors='ignore')}")
+
+            # Extract SOFTWARE hive
+            reg_src = r"c:\windows\system32\config\SOFTWARE"
+            cmdline2 = f'"{esentutl_path}" /y "{reg_src}" /vss /d "{registry_file}"'
+            logger.debug(f"Executing Registry extraction command: {cmdline2}")
+            phandle2 = subprocess.Popen(cmdline2, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out2, err2 = phandle2.communicate()
+            logger.debug(f"Registry extraction stdout: {out2.decode(errors='ignore')}")
+            logger.debug(f"Registry extraction stderr: {err2.decode(errors='ignore')}")
+            out1 += err1 # Combine stdout/stderr for checking
+            out2 += err2
         else:
-            fget_binary = urllib.request.urlopen('https://github.com/MarkBaggett/srum-dump/raw/master/FGET.exe').read()
-            fget_file.write_bytes(fget_binary)
-            cmdline = r"{} -extract c:\\windows\\system32\\sru\srudb.dat {}".format(str(fget_file), str(extracted_srum))
-            phandle = subprocess.Popen(cmdline, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out1, _ = phandle.communicate()
-            cmdline = r"{} -extract c:\\windows\\system32\\config\SOFTWARE {}".format(str(fget_file), str(registry_file))
-            phandle = subprocess.Popen(cmdline, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            out2, _ = phandle.communicate()
-            fget_file.unlink()
+            logger.warning("esentutl.exe not found or COMSPEC not set. Falling back to FGET.exe.")
+            fget_url = 'https://github.com/MarkBaggett/srum-dump/raw/master/FGET.exe'
+            try:
+                logger.debug(f"Downloading FGET.exe from {fget_url}")
+                fget_binary = urllib.request.urlopen(fget_url).read()
+                logger.debug(f"Writing FGET.exe to {fget_file}")
+                fget_file.write_bytes(fget_binary)
+            except Exception as download_ex:
+                 logger.exception(f"Failed to download or write FGET.exe: {download_ex}")
+                 print(f"ERROR: Failed to download FGET.exe: {download_ex}")
+                 return None # Cannot proceed without extraction tool
+
+            # Extract SRUM DB with FGET
+            srum_src = r"c:\windows\system32\sru\srudb.dat"
+            cmdline1 = f'"{fget_file}" -extract "{srum_src}" "{extracted_srum}"'
+            logger.debug(f"Executing SRUM extraction command: {cmdline1}")
+            phandle1 = subprocess.Popen(cmdline1, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out1, err1 = phandle1.communicate()
+            logger.debug(f"SRUM extraction stdout: {out1.decode(errors='ignore')}")
+            logger.debug(f"SRUM extraction stderr: {err1.decode(errors='ignore')}")
+
+            # Extract SOFTWARE hive with FGET
+            reg_src = r"c:\windows\system32\config\SOFTWARE"
+            cmdline2 = f'"{fget_file}" -extract "{reg_src}" "{registry_file}"'
+            logger.debug(f"Executing Registry extraction command: {cmdline2}")
+            phandle2 = subprocess.Popen(cmdline2, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            out2, err2 = phandle2.communicate()
+            logger.debug(f"Registry extraction stdout: {out2.decode(errors='ignore')}")
+            logger.debug(f"Registry extraction stderr: {err2.decode(errors='ignore')}")
+            out1 += err1 # Combine stdout/stderr
+            out2 += err2
+
+            # Clean up downloaded FGET
+            try:
+                logger.debug(f"Deleting downloaded FGET.exe: {fget_file}")
+                fget_file.unlink()
+            except Exception as unlink_ex:
+                logger.warning(f"Could not delete temporary FGET.exe: {unlink_ex}")
+
     except Exception as e:
-        print("Unable to automatically extract srum. {}\n{}\n{}".format(str(e), out1.decode(), out2.decode()))
+        # Log exception and print original message
+        err_msg = f"Unable to automatically extract files. Error: {e}"
+        print(err_msg)
+        print(f"SRUM Output:\n{out1.decode(errors='ignore')}\nRegistry Output:\n{out2.decode(errors='ignore')}")
+        logger.exception(err_msg)
         return None
-    if (b"returned error" in out1 + out2) or (b"Init failed" in out1 + out2):
-        print("ERROR\n SRUM Extraction: {}\n Registry Extraction {}".format(out1.decode(), out2.decode()))
+    finally:
+        # Attempt to clean up temp dir even if errors occurred
+        if tmp_dir and pathlib.Path(tmp_dir).exists():
+            try:
+                # Be cautious deleting directories, ensure it's the one we created
+                # shutil.rmtree(tmp_dir) # Consider using shutil for robust deletion
+                # For now, just log that it should be cleaned up manually if needed
+                logger.info(f"Temporary directory {tmp_dir} may need manual cleanup if files remain.")
+                pass # Avoid auto-deletion for safety unless explicitly required
+            except Exception as cleanup_ex:
+                logger.warning(f"Failed to clean up temporary directory {tmp_dir}: {cleanup_ex}")
+
+
+    # Check results
+    combined_output = out1 + out2
+    if (b"error" in combined_output.lower()) or (b"fail" in combined_output.lower()):
+        err_msg = f"ERROR during extraction.\n SRUM Extraction Output: {out1.decode(errors='ignore')}\n Registry Extraction Output: {out2.decode(errors='ignore')}"
+        print(err_msg)
+        logger.error(err_msg)
+        # Check if files were partially created and log
+        if not extracted_srum.exists(): logger.error("Extracted SRUM file does not exist.")
+        if not registry_file.exists(): logger.error("Extracted Registry file does not exist.")
+        return None # Indicate failure
     elif b"success" in out1.lower() and b"success" in out2.lower():
+        logger.info(f"Successfully extracted SRUM to {extracted_srum} and Registry to {registry_file}")
         return str(extracted_srum), str(registry_file)
     else:
-        print("Unable to determine success or failure.", out1.decode(), "\n", out2.decode())
-    return None
-
+        # Log uncertainty but still return paths if they exist, as esentutl might not print 'success'
+        warn_msg = f"Could not definitively determine success or failure from output.\n SRUM Output: {out1.decode(errors='ignore')}\n Registry Output: {out2.decode(errors='ignore')}"
+        print(warn_msg)
+        logger.warning(warn_msg)
+        if extracted_srum.exists() and registry_file.exists():
+             logger.warning("Both extracted files exist, proceeding despite ambiguous output.")
+             return str(extracted_srum), str(registry_file)
+        else:
+             logger.error("Extraction likely failed as one or both output files are missing.")
+             if not extracted_srum.exists(): logger.error(f"Missing: {extracted_srum}")
+             if not registry_file.exists(): logger.error(f"Missing: {registry_file}")
+             return None # Indicate failure

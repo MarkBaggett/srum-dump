@@ -3,6 +3,12 @@ import struct
 import codecs
 import uuid
 from datetime import datetime
+import logging
+
+# --- Logger Setup ---
+# Note: Using class name directly here as it's the primary component
+logger = logging.getLogger("srum_dump.db_dissect")
+# --- End Logger Setup ---
 
 from dissect.esedb import EseDB
 from dissect.esedb.tools.sru import SRU, Entry
@@ -11,6 +17,7 @@ from dissect.util.ts import oatimestamp
 
 from helpers import known_tables, skip_tables
 from helpers import ole_timestamp, blob_to_string, BinarySIDtoStringSID
+
 
 class DissectESETableWrapper:
     def __init__(self, table):
@@ -32,6 +39,7 @@ class DissectESERecordWrapper(Entry):
     def value(self, column_name):
         """Return the value of the specified column."""
         try:
+            logger.debug(f".value() Retrieving value from column {column_name}.")
             column_index = self.column_names.index(column_name)
             col_data = getattr(self.record,column_name)
             col_type = self.column_types[column_index]
@@ -52,9 +60,11 @@ class DissectESERecordWrapper(Entry):
                 col_data = int(col_data)
             elif "float" in type(col_data).__name__:
                 col_data = float(col_data)
+            logger.debug(f".value() result {column_name} = {col_data}.")
             return col_data
-        except ValueError:
-            raise ValueError(f"Column '{column_name}' not found in record")
+        except Exception as e:
+            logger.exception(f".value() raise error retrieving value : {str(e)} ")
+
 
 class srum_database(object):
     def __init__(self, db_path, config):
@@ -72,13 +82,15 @@ class srum_database(object):
 
     def connect(self):
         """Establish a connection to the ESE database."""
+        logging.debug(f"Connecting to database {self.db_path}")
         if not self.db_path.is_file():
             raise ValueError("The specified file path does not exist")
         try:
             self.file_handle = self.db_path.open("rb")
             self.sru = SRU(self.file_handle)
         except Exception as e:
-            raise Exception(f"Error connecting to database: {e}")
+            logger.exception(f"Error connecting to database: {e}")
+
 
     def close(self):
         """Close the database connection."""
@@ -89,7 +101,7 @@ class srum_database(object):
 
     def load_srumid_lookups(self):
         """loads the SRUMID numbers from the SRUM database"""
-
+        logger.debug("Loading SRUMID database.")
         lookups = self.config.get_config("known_sids")
         for id,rec_entry in self.sru.id_map.items():
             IdType = getattr(rec_entry, "IdType") 
@@ -106,6 +118,7 @@ class srum_database(object):
 
     def get_tables(self):
         """Yield table names one at a time from the database."""
+        logger.debug(f".get_tables() is yielding each of the tables.")
         if not self.sru:
             raise Exception("Database not connected. Call connect() first.")
         for table in self.sru.esedb.tables():
@@ -113,24 +126,29 @@ class srum_database(object):
 
     def get_table(self, table_name):
         """Return the table object for the specified table name."""
+        logger.debug(f".get_table({table_name}) is retrieving table.")
         if not self.sru:
             raise Exception("Database not connected. Call connect() first.")
         try:
             tbl = DissectESETableWrapper(self.sru.get_table(table_guid=table_name))
             return tbl
         except Exception as e:
-            raise Exception(f"Error retrieving table {table_name}: {e}")
+            logging.exception(f"Error retrieving table {table_name}: {e}")
+
 
     def get_records(self, table_name):
         """Yield records one at a time from the specified table."""
         table = self.get_table(table_name)
+        logger.debug(f"get_record({table_name}) called")
         if not table:
+            logger.exception(f"get_records({table_name}) raised error {str(e)}.")
             raise Exception(f"Table {table_name} not found.")
         try:
             for record in table.records():
                 yield DissectESERecordWrapper(self, table, record)
         except Exception as e:
-            raise Exception(f"Error retrieving records from {table_name}: {e}")
+            logger.exception(f"Error retrieving records from {table_name}: {e}")
+
 
 # Example usage with generators
 if __name__ == "__main__":
