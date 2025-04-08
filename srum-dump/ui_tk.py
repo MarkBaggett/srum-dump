@@ -441,7 +441,7 @@ def get_user_input(options):
         # tk.Button(srum_input_frame, text="Browse", command=lambda: srum_path_entry.delete(0, tk.END) or srum_path_entry.insert(0, browse_file(srum_path_entry.get() or initial_srum_path, [('SRUDB Database', 'srudb.dat'), ('All files', '*.*')]))).pack(side=tk.LEFT, padx=5)
 
         # Configuration File section
-        config_frame = tk.LabelFrame(content_frame, text='REQUIRED: Configuration File (usually in Output Directory)')
+        config_frame = tk.LabelFrame(content_frame, text='Configuration File:')
         config_frame.pack(fill=tk.X, pady=5, padx=5)
         config_input_frame = tk.Frame(config_frame)
         config_input_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -455,7 +455,7 @@ def get_user_input(options):
         tk.Button(config_input_frame, text="Edit", command=edit_config).pack(side=tk.LEFT, padx=5)
 
         # Output Directory section
-        output_frame = tk.LabelFrame(content_frame, text='REQUIRED: Output folder for results and config')
+        output_frame = tk.LabelFrame(content_frame, text='Output folder:')
         output_frame.pack(fill=tk.X, pady=5, padx=5)
         output_input_frame = tk.Frame(output_frame)
         output_input_frame.pack(fill=tk.X, padx=5, pady=5)
@@ -609,7 +609,7 @@ def get_input_wizard(options):
         while True:
             output_dir = create_step_window(
                 "Step 1: Select Output/Working Directory",
-                "Select a directory for output files and the configuration file:",
+                "Select a directory for output, artifacts, logs, etc:",
                 working_default, # default value
                 working_default, # starting browse location
                 'dir'            # 'dir' indicates directory selection
