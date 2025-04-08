@@ -152,7 +152,7 @@ logger.debug("Starting main processing.")
 
 #Display Progress Window
 progress = ProgressWindow("SRUM-DUMP 3.0")
-progress.start(len(table_list))
+progress.start(len(table_list)+1)
 
 
 #Preload some lookup tables for speed
@@ -260,10 +260,10 @@ try:  # Start of the main processing block
             logger.info(f"Table {table_name} contained {table_count} records.")
             progress.log_message(f"Table {table_name} contained {table_count} records.\n")
 
-    progress.log_message(f"Finalizing output now...  Total Records: {read_count}.\n")
+    progress.log_message(f"Writing Output Files...  Please be patient\n")
     output.save()
-    progress.set_current_table("Finished")
-    progress.log_message(f"Finished!")
+    progress.set_current_table(f"Finished")
+    progress.log_message(f"Finished!  Total Records: {read_count}.\n")
     progress.finished()
     logger.info("Main processing finished successfully.")
     # --- End of Finalization steps ---
