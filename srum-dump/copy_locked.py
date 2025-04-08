@@ -365,8 +365,8 @@ def copy_locked_files(destination_folder: pathlib.Path):
         # --- Step 1: Create Volume Shadow Copy ---
         ui_window.set_current_table("Creating Volume Shadow Copy")
         volume = pathlib.Path(os.environ["SystemRoot"]).drive
-        ui_window.log_message("Note: There are known issues with extracting a srudb.dat from live Windows 11 systems that results in corrupt srudb.dat files. You are encouraged to extract the files from a forensics image.\nBest effort being applied \n")
-        ui_window.log_message(f"Creating a volume shadow copy for {volume}...")
+        
+        ui_window.log_message(f"Creating a volume shadow copy for {volume}... Please be patient.")
         logger.info(f"Attempting VSS creation for volume {volume}")
         try:
             shadow_path = create_shadow_copy(f"{volume}\\")
@@ -548,6 +548,7 @@ def copy_locked_files(destination_folder: pathlib.Path):
             ui_window.log_message(f"ERROR: {final_msg}")
 
         if not success:
+            ui_window.log_message("Errors occured. Review the messages above and rerun this program to try again.\n")
             ui_window.log_message("Close this Window to proceed.")
             ui_window.finished()
             try:
