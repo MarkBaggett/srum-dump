@@ -297,7 +297,6 @@ def column_friendly_names( original_name):
 
 def BinarySIDtoStringSID(sid_str, sid_lookups=None):
     """Converts a binary SID to its string representation."""
-    logger.debug(f"Called BinarySIDtoStringSID with sid_str length: {len(sid_str) if sid_str else 0}, sid_lookups: {'Provided' if sid_lookups else 'Default'}")
     #Original form Source: https://github.com/google/grr/blob/master/grr/parsers/wmi_parser.py
     """Converts a binary SID to its string representation.
      https://msdn.microsoft.com/en-us/library/windows/desktop/aa379597.aspx
@@ -316,6 +315,7 @@ def BinarySIDtoStringSID(sid_str, sid_lookups=None):
     Raises:
       ValueError: If the binary SID is malformed.
     """
+    logger.debug(f"Called BinarySIDtoStringSID with sid_str length: {len(sid_str) if sid_str else 0}, sid_lookups: {'Provided' if sid_lookups else 'Default'}")
     sid_string_representation = "" # Initialize
     sid_name = 'unknown'
     try:
