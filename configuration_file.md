@@ -95,3 +95,9 @@ Maps numerical network interface types to their respective descriptions:
 
 This configuration file plays a crucial role in processing the `SRUDB.dat` file, allowing for structured extraction, interpretation, and reporting of Windows system resource usage data.
 
+
+## 11. SRUDbIdMapTable
+This massive dictionary contains every string that was extracted from the activity found in srudb.dat file. While processing the tables in your srudb.dat the `AppID` and `UserID` values stored in the tables will be translated into these strings. If you know the name of malware or a particular process you can modify the strings in this table to make them stand out. String modifications here do not impact performance in the way that dirty word searches do. The entries are comprised of an App or UserId and the associated string. Do not change the keys (numbers) only change the strings.
+
+- `3` → `!!svchost.exe!1972/12/14:16:22:50!1c364![LocalService] [nsi]`
+- `4` → `S-1-5-19 (LocalService)`
