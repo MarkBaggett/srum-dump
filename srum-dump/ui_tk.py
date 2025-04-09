@@ -2,13 +2,10 @@ import tkinter as tk
 import webbrowser
 import pathlib
 import os
-import ctypes
-import tempfile
-import subprocess
-import urllib.request
 import pathlib
 import sys
-import logging # Added for logging
+import logging 
+import time
 
 import helpers
 
@@ -208,6 +205,8 @@ class ProgressWindow:
         try:
             if self.close_button.winfo_exists():
                 self.close_button.config(state=tk.NORMAL)  # Make button clickable
+                self.close_button.bind("<Enter>", lambda e: self.close_button.config(bg="#e0e0e0"))
+                self.close_button.bind("<Leave>", lambda e: self.close_button.config(bg="#f0f0f0"))
                 logger.debug("Close button enabled.")
             else:
                 logger.warning("Close button does not exist in finished.")
@@ -334,12 +333,12 @@ def get_user_input(options):
     def on_support_click(event):
         logger.debug("Called on_support_click (nested in get_user_input)")
         try:
-            twitter_url = "https://twitter.com/MarkBaggett"
-            youtube_url = "http://youtube.com/markbaggett"
-            logger.info(f"Opening support URL: {twitter_url}")
-            webbrowser.open(twitter_url)
-            logger.info(f"Opening support URL: {youtube_url}")
-            webbrowser.open(youtube_url)
+            logger.info(f"Opening support URLs")
+            webbrowser.open_new_tab("https://x.com/MarkBaggett")
+            time.sleep(1)
+            webbrowser.open_new_tab("https://www.linkedin.com/in/mark-baggett/")
+            time.sleep(1)
+            webbrowser.open_new_tab("http://youtube.com/markbaggett")
         except Exception as e:
             logger.exception(f"Error opening support links: {e}")
 
@@ -400,12 +399,12 @@ def get_user_input(options):
         root.title("SRUM_DUMP 3.0")
         root.geometry("800x400")
         root.attributes('-topmost', True)
-        root.after(20, remove_topmost , root)
+        root.after(20, remove_topmost, root)
         logger.debug("Main input window created.")
         try:
-            root.iconbitmap(icon_path)  # Replace with your icon file's path
+            root.iconbitmap(icon_path)
         except tk.TclError:
-            logger.excpetion("Icon file not found or invalid.")
+            logger.exception("Icon file not found or invalid.")
 
         image_path = os.path.join(base_path, 'srum-dump.png')
         logger.debug(f"Image path: {image_path}")
@@ -420,25 +419,26 @@ def get_user_input(options):
             logo_label.pack()
             logger.debug("Logo image loaded.")
         else:
-            tk.Label(logo_frame, text="SRUM DUMP Logo").pack() # Fallback text
+            tk.Label(logo_frame, text="SRUM DUMP Logo").pack()
             logger.warning(f"Logo image not found at: {image_path}")
-
 
         # Main content frame
         content_frame = tk.Frame(root)
         content_frame.pack(padx=20, fill=tk.BOTH, expand=True)
 
-        # --- Input Fields ---
+        # Button configuration with colors
+        button_config = {
+            'width': 10,
+            'height': 1,
+            'padx': 5,
+            'pady': 5,
+            'relief': tk.RAISED,
+            'borderwidth': 2,
+            'bg': '#f0f0f0',
+            'activebackground': '#e0e0e0'
+        }
 
-        # SRUM Database section
-        # srum_frame = tk.LabelFrame(content_frame, text='REQUIRED: Path to SRUDB.DAT')
-        # srum_frame.pack(fill=tk.X, pady=5, padx=5)
-        # srum_input_frame = tk.Frame(srum_frame)
-        # srum_input_frame.pack(fill=tk.X, padx=5, pady=5)
-        # srum_path_entry = tk.Entry(srum_input_frame, width=80)
-        # srum_path_entry.pack(side=tk.LEFT, expand=True, fill=tk.X, pady=5)
-        # srum_path_entry.insert(0, initial_srum_path)
-        # tk.Button(srum_input_frame, text="Browse", command=lambda: srum_path_entry.delete(0, tk.END) or srum_path_entry.insert(0, browse_file(srum_path_entry.get() or initial_srum_path, [('SRUDB Database', 'srudb.dat'), ('All files', '*.*')]))).pack(side=tk.LEFT, padx=5)
+        # --- Input Fields ---
 
         # Configuration File section
         config_frame = tk.LabelFrame(content_frame, text='Configuration File:')
@@ -447,42 +447,81 @@ def get_user_input(options):
         config_input_frame.pack(fill=tk.X, padx=5, pady=5)
         config_file_label = tk.Label(config_input_frame, width=80, anchor=tk.W, bg="lightgray", relief=tk.SUNKEN)
         config_file_label.pack(side=tk.LEFT, expand=True, fill=tk.X, pady=5)
-        config_file_label.config(text = initial_config_file)
-        # config_file_entry = tk.Entry(config_input_frame, width=80)
-        # config_file_entry.pack(side=tk.LEFT, expand=True, fill=tk.X, pady=5)
-        # config_file_entry.insert(0, str(initial_config_file)) # Use string representation
-        #tk.Button(config_input_frame, text="Browse", command=lambda: config_file_entry.delete(0, tk.END) or config_file_entry.insert(0, browse_file(config_file_entry.get() or initial_out_dir, [('JSON Config', '*.json'), ('All files', '*.*')]))).pack(side=tk.LEFT, padx=5)
-        tk.Button(config_input_frame, text="Edit", command=edit_config).pack(side=tk.LEFT, padx=5)
+        config_file_label.config(text=initial_config_file)
+        
+        edit_btn = tk.Button(
+            config_input_frame, 
+            text="Edit", 
+            command=edit_config,
+            **button_config
+        )
+        edit_btn.pack(side=tk.LEFT, padx=5)
+        edit_btn.bind("<Enter>", lambda e: edit_btn.config(bg="#e0e0e0"))
+        edit_btn.bind("<Leave>", lambda e: edit_btn.config(bg="#f0f0f0"))
 
         # Output Directory section
         output_frame = tk.LabelFrame(content_frame, text='Output folder:')
         output_frame.pack(fill=tk.X, pady=5, padx=5)
         output_input_frame = tk.Frame(output_frame)
         output_input_frame.pack(fill=tk.X, padx=5, pady=5)
-        # out_dir_label = tk.Label(output_input_frame, width=80, anchor=tk.W, bg="lightgray", relief=tk.SUNKEN) #added background and relief for better visual
-        # out_dir_label.pack(side=tk.LEFT, expand=True, fill=tk.X, pady=5)
-        # out_dir_label.config(text=initial_out_dir)
         out_dir_entry = tk.Entry(output_input_frame, width=80)
         out_dir_entry.pack(side=tk.LEFT, expand=True, fill=tk.X, pady=5)
         out_dir_entry.insert(0, initial_out_dir)
-        tk.Button(output_input_frame, text="Browse", command=lambda: out_dir_entry.delete(0, tk.END) or out_dir_entry.insert(0, browse_directory(out_dir_entry.get() or initial_out_dir))).pack(side=tk.LEFT, padx=5)
+        
+        # Modified Browse button logic
+        def browse_with_restore():
+            initial_value = out_dir_entry.get()  # Store the original value
+            new_dir = browse_directory(out_dir_entry.get() or initial_out_dir)
+            if new_dir:  # If a new directory is selected (not canceled)
+                out_dir_entry.delete(0, tk.END)
+                out_dir_entry.insert(0, new_dir)
+            else:  # If canceled, restore the original value
+                out_dir_entry.delete(0, tk.END)
+                out_dir_entry.insert(0, initial_value)
+
+        browse_btn = tk.Button(
+            output_input_frame, 
+            text="Browse", 
+            command=browse_with_restore,
+            **button_config
+        )
+        browse_btn.pack(side=tk.LEFT, padx=5)
+        browse_btn.bind("<Enter>", lambda e: browse_btn.config(bg="#e0e0e0"))
+        browse_btn.bind("<Leave>", lambda e: browse_btn.config(bg="#f0f0f0"))
 
         # Support link
-        support_label = tk.Label(root, text="Click here for support via Twitter @MarkBaggett",
-                               fg="blue", cursor="hand2")
+        support_label = tk.Label(root, text="Click here for support or to reach the tool author.",
+                            fg="blue", cursor="hand2")
         support_label.pack(pady=10)
         support_label.bind("<Button-1>", on_support_click)
 
         # Action buttons
         button_frame = tk.Frame(root)
         button_frame.pack(pady=10)
-        tk.Button(button_frame, text="Confirm", command=on_confirm, width=10).pack(side=tk.LEFT, padx=10)
-        tk.Button(button_frame, text="Cancel", command=on_cancel, width=10).pack(side=tk.LEFT, padx=10)
+        
+        confirm_btn = tk.Button(
+            button_frame, 
+            text="Confirm", 
+            command=on_confirm,
+            **button_config
+        )
+        confirm_btn.pack(side=tk.LEFT, padx=10)
+        confirm_btn.bind("<Enter>", lambda e: confirm_btn.config(bg="#e0e0e0"))
+        confirm_btn.bind("<Leave>", lambda e: confirm_btn.config(bg="#f0f0f0"))
+
+        cancel_btn = tk.Button(
+            button_frame, 
+            text="Cancel", 
+            command=on_cancel,
+            **button_config
+        )
+        cancel_btn.pack(side=tk.LEFT, padx=10)
+        cancel_btn.bind("<Enter>", lambda e: cancel_btn.config(bg="#e0e0e0"))
+        cancel_btn.bind("<Leave>", lambda e: cancel_btn.config(bg="#f0f0f0"))
 
         logger.debug("Starting main input window mainloop.")
         root.mainloop()
         logger.debug("Main input window mainloop finished.")
-
     except Exception as e:
         logger.exception(f"Error setting up or running get_user_input main window: {e}")
         # Optionally show an error message if Tkinter setup fails critically
@@ -552,42 +591,84 @@ def get_input_wizard(options):
             path_entry.insert(0,'EXIT') # Special value to signal exit
             window.quit() # End the window's mainloop
 
-        # --- Setup Step Window ---
         try:
             window = tk.Tk()
             window.title(title)
-            window.geometry("600x150+300+200") # Position might need adjustment
+            window.geometry("600x150+300+200")
             window.attributes('-topmost', True)
-            window.after(2000, remove_topmost, window) # Pass window object
+            window.after(2000, remove_topmost, window)
             logger.debug(f"Step window '{title}' created.")
             try:
-                window.iconbitmap(icon_path)  # Replace with your icon file's path
+                window.iconbitmap(icon_path)
             except tk.TclError:
                 logger.exception("Icon file not found or invalid.")
 
+            # Main frame with padding
             frame = tk.Frame(window)
             frame.pack(pady=20, padx=20, fill=tk.X)
 
             tk.Label(frame, text=label_text).pack(anchor='w')
 
             path_entry = tk.Entry(frame, width=60)
-            path_entry.insert(0, str(default_value)) # Ensure default is string
+            path_entry.insert(0, str(default_value))
             path_entry.pack(pady=5, fill=tk.X)
 
+            # Button frame with consistent styling
             button_frame = tk.Frame(window)
-            button_frame.pack(pady=10)
+            button_frame.pack(pady=10, fill=tk.X)
 
-            tk.Button(button_frame, text="Browse", command=on_browse).pack(side=tk.LEFT, padx=10)
-            tk.Button(button_frame, text=next_label, command=on_next).pack(side=tk.LEFT, padx=10)
-            tk.Button(button_frame, text="Exit", command=on_exit).pack(side=tk.RIGHT, padx=10)
+            # Button configuration with colors
+            button_config = {
+                'width': 10,          # Uniform width
+                'height': 1,          # Consistent height
+                'padx': 5,            # Internal padding
+                'pady': 5,
+                'relief': tk.RAISED,  # 3D effect
+                'borderwidth': 2,     # Border thickness
+                'bg': '#f0f0f0',     # Light gray background
+                'activebackground': '#e0e0e0'  # Slightly darker when clicked
+            }
+
+            # Create buttons with consistent styling
+            browse_btn = tk.Button(
+                button_frame, 
+                text="Browse", 
+                command=on_browse,
+                **button_config
+            )
+            next_btn = tk.Button(
+                button_frame, 
+                text=next_label, 
+                command=on_next,
+                **button_config
+            )
+            exit_btn = tk.Button(
+                button_frame, 
+                text="Exit", 
+                command=on_exit,
+                **button_config
+            )
+
+            # Add hover effects
+            for btn in [browse_btn, next_btn, exit_btn]:
+                btn.bind("<Enter>", lambda e, b=btn: b.config(bg="#e0e0e0"))
+                btn.bind("<Leave>", lambda e, b=btn: b.config(bg="#f0f0f0"))
+
+            # Grid layout for better control
+            button_frame.columnconfigure(0, weight=1)
+            button_frame.columnconfigure(1, weight=1)
+            button_frame.columnconfigure(2, weight=1)
+
+            browse_btn.grid(row=0, column=0, padx=10, pady=5, sticky='e')
+            next_btn.grid(row=0, column=1, padx=10, pady=5)
+            exit_btn.grid(row=0, column=2, padx=10, pady=5, sticky='w')
 
             logger.debug(f"Starting mainloop for step window '{title}'.")
             window.mainloop()
             logger.debug(f"Mainloop finished for step window '{title}'.")
 
-            result = path_entry.get() # Get result after mainloop finishes
+            result = path_entry.get()
             logger.debug(f"Result from step window '{title}': {result}")
-
         except Exception as e:
             logger.exception(f"Error creating or running step window '{title}': {e}")
             result = "ERROR" # Indicate error
