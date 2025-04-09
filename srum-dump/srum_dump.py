@@ -113,7 +113,26 @@ if options.REG_HIVE:
         known_sids.update(registry_sids)
         config.set_config("known_sids", known_sids)
         config.save()
-    
+
+
+#Open the srum and allow the SRUDbIdMapTable to load then add it to the config
+#Select ESE engine
+if options.ESE_ENGINE == "pyesedb":
+    from db_ese import srum_database
+else:
+    from db_dissect import srum_database
+
+#Open database using specified engine
+try:
+    ese_db = srum_database(options.SRUM_INFILE, config)
+    table_list = list(set(ese_db.get_tables()).difference(set(helpers.skip_tables)))
+except Exception as e:
+    error_message_box("CRITICAL", f"I could not open the srum file it appears to be corrupt. Error:{str(e)}")
+    sys.exit(1)
+
+config.set_config("SRUDbIdMapTable", ese_db.id_lookup)
+config.save() 
+
 #Let User confirm the settings and paths.  Then save for reuse next time
 if not options.NO_CONFIRM:
     get_user_input(options)
@@ -129,20 +148,6 @@ else:
     from output_xlsx import OutputXLSX
     output = OutputXLSX()
 
-#Select ESE engine
-if options.ESE_ENGINE == "pyesedb":
-    from db_ese import srum_database
-else:
-    from db_dissect import srum_database
-
-#Open database using specified engine
-try:
-    ese_db = srum_database(options.SRUM_INFILE, config)
-    table_list = list(set(ese_db.get_tables()).difference(set(helpers.skip_tables)))
-except Exception as e:
-    error_message_box("CRITICAL", f"I could not open the srum file it appears to be corrupt. Error:{str(e)}")
-    sys.exit(1)
-
 logger.debug("Starting main processing.")
 #Enable to debug when dissect in use
 # import debugpy
@@ -152,12 +157,14 @@ logger.debug("Starting main processing.")
 
 #Display Progress Window
 progress = ProgressWindow("SRUM-DUMP 3.0")
-progress.start(len(table_list)+1)
+progress.start(len(table_list) + 2)
 
 
 #Preload some lookup tables for speed
 trans_table = config.get_config("columns_to_translate")
 dirty_words = config.get_config("dirty_words")
+app_ids = config.get_config("SRUDbIdMapTable")
+user_sids = config.get_config("known_sids")
 ads = helpers.ads
 
 #Create the workbook / directory
@@ -211,14 +218,14 @@ try:  # Start of the main processing block
                     if not out_format or not embedded_value:
                         new_row.append( embedded_value )
                     elif out_format == "APPID":
-                        val = ese_db.id_lookup.get(str(embedded_value),'')
+                        val = app_ids.get(str(embedded_value),'')
                         new_row.append( val )
                         #Colorize the dirty word cells
                         for eachword in dirty_words:
                             if eachword.lower() in val.lower():
                                 cell_formats[position] = ("General",f"BOLD:{dirty_words.get(eachword)}")   
                     elif out_format == "SID":
-                        val = ese_db.id_lookup.get(str(embedded_value),'')
+                        val = user_sids.get(str(embedded_value),'')
                         new_row.append(val)
                         #Colorize the dirty word cells
                         for eachword in dirty_words:
@@ -260,6 +267,7 @@ try:  # Start of the main processing block
             logger.info(f"Table {table_name} contained {table_count} records.")
             progress.log_message(f"Table {table_name} contained {table_count} records.\n")
 
+    progress.set_current_table(f"Writing Output Files.")
     progress.log_message(f"Writing Output Files...  Please be patient\n")
     output.save()
     progress.set_current_table(f"Finished")
