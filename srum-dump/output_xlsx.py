@@ -106,9 +106,13 @@ class OutputXLSX:
             # Use a nested logger name
             self.logger = logging.getLogger(f"srum_dump.{__name__}.XLSXWorksheetContext")
             self.logger.debug(f"Initializing XLSXWorksheetContext for sheet: '{worksheet_name}'")
+            if len(worksheet_name) > 31:
+                err_msg = f"Truncating Worksheet name '{worksheet_name}' because it exceeds 31 characters."
+                self.logger.error(err_msg)
+
             try:
                 self.workbook = workbook
-                self.worksheet_name = worksheet_name
+                self.worksheet_name = worksheet_name[:31]
                 self.column_headers = column_headers
                 self.worksheet = None
                 self.logger.debug(f"Context initialized for sheet '{worksheet_name}' with {len(column_headers)} headers.")
