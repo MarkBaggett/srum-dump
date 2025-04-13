@@ -29,9 +29,9 @@ logger.debug(f"{'*'*1000}")
 skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable', 'SruDbCheckpointTable']
 
 dirty_words = {
-    'put a process user or wifi network name here before the colon': 'RED',
-    'After the colon put a color in all caps':'BLUE',
-    'These dirty words SIGNIFICANTLY impact performance use with caution':'GREEN',
+    'put a process user or wifi network name here before the colon': 'general-red-bold',
+    'After the colon put a color in all caps':'highlight-red',
+    'These dirty words SIGNIFICANTLY impact performance use with caution':'highlight-yellow'
 }
 
 known_sids = {
@@ -69,13 +69,13 @@ known_sids = {
 }
 
 known_tables = {
-    '{D10CA2FE-6FCF-4F6D-848E-B2E99266FA89}': 'Application', 
-    '{5C8CF1C7-7257-4F13-B223-970EF5939312}': 'Application Timeline', 
-    '{DA73FB89-2BEA-4DDC-86B8-6E048C6DA477}': 'Energy Estimator', 
+    '{D10CA2FE-6FCF-4F6D-848E-B2E99266FA89}': 'Application Resource Usage', 
+    '{5C8CF1C7-7257-4F13-B223-970EF5939312}': 'App Timeline Provider', 
+    '{DA73FB89-2BEA-4DDC-86B8-6E048C6DA477}': 'Energy Estimator Provider', 
     '{FEE4E14F-02A9-4550-B5CE-5FA2DA202E37}': 'Energy Usage', 
     '{FEE4E14F-02A9-4550-B5CE-5FA2DA202E37}LT': 'Energy Usage Long Term', 
-    '{DD6636C4-8929-4683-974E-22C046A43763}': 'Network Connectivity', 
-    '{973F5D5C-1D90-4944-BE8E-24B94231A174}': 'Network Data', 
+    '{DD6636C4-8929-4683-974E-22C046A43763}': 'Network Connectivity Usage', 
+    '{973F5D5C-1D90-4944-BE8E-24B94231A174}': 'Network Data Usage', 
     '{D10CA2FE-6FCF-4F6D-848E-B2E99266FA86}': 'Push Notifications', 
     '{DC3D3B50-BB90-5066-FA4E-A5F90DD8B677}': 'SDP CPU', 
     '{CDF8EBF6-7C0F-5AC2-158F-DBFBEE981152}': 'SDP Event Log', 
@@ -88,12 +88,110 @@ known_tables = {
     '{97C2CE28-A37B-4920-B1E9-8B76CD341EC5}': 'Undocumented Windows 10 VM info'
 }
 
+column_markups = {
+    'All Tables': {
+        'TimeStamp': {
+            'friendly_name': 'SRUM Entry Creation (UTC)',
+            'translate': 'OLE',
+        },
+        'AppId': {
+            'friendly_name': 'Application/Process',
+            'translate': 'APPID',
+            'width': '100'
+        },
+        'UserId': {
+            'friendly_name': 'User Information',
+            'translate': 'SID',
+            'width': '60'
+        },
+        'EndTime': {
+            'translate': 'FILE:%Y-%m-%d %H:%M:%S',
+            'width': '20'
+        },
+        'StartTime': {
+            'translate': 'FILE:%Y-%m-%d %H:%M:%S',
+            'width' : '20'
+        },
+        'EventTimestamp': {
+            'friendly_name': 'Event Time Stamp',
+            'translate': 'FILE:%Y-%m-%d %H:%M:%S',
+            'width' : '20'
+        },
+        'ConnectStartTime': {
+            'translate': 'FILE:%Y-%m-%d %H:%M:%S',
+            'width' : '20'
+        },
+        'ActiveAcTime': {
+            'translate': 'seconds'
+        },
+        'CsAcTime': {
+            'translate': 'seconds'
+        },
+        'ActiveDcTime': {
+            'translate': 'seconds'
+        },
+        'CsDcTime': {
+            'translate': 'seconds'
+        },
+        'ActiveDischargeTime': {
+            'translate': 'seconds'
+        },
+        'CsDischargeTime': {
+            'translate': 'seconds'
+        },
+        'InterfaceLuid': { 
+            'friendly_name': 'Interface',
+            'translate': 'interface_types',
+            'width' : '25'
+        },
+        'L2ProfileId': {
+            'friendly_name': 'Profile',
+            'translate': 'network_interface',
+            'width' : '25'
+        },
+        'AutoIncId': {
+            'friendly_name': 'Srum ID Number'
+
+        },
+        'ForegroundCycleTime': {
+            'friendly_name': 'CPU time in Forground'
+        },
+        'BackgroundCycleTime': {
+            'friendly_name': 'CPU time in background'
+        },
+        'Flags': {
+            'friendly_name': 'Flags (BinaryData)'
+        },
+        'ChargeLevel': {
+            'friendly_name': 'Battery Level'
+        },
+        'L2ProfileFlags': {
+            'friendly_name': 'Profile Flags'
+        },
+        'BytesSent': {
+            'friendly_name': 'Bytes Sent'
+        },
+        'BytesRecvd': {
+            'friendly_name': 'Bytes Received'
+        }
+    },
+    'Energy Usage': {
+        # Example override (optional, adjust as needed)
+        'Percentage Charge': {
+            'friendly_name': 'Charge Percentage',
+            'formula': '=I#ROW_NUM#/G#ROW_NUM#',
+            'style': "percent-green" 
+        }
+    }
+}
+
 columns_to_translate = {
     'TimeStamp': 'OLE',
     'AppId': 'APPID',
     'UserId': 'SID',
     'EndTime': 'FILE:%Y-%m-%d %H:%M:%S',
     'EventTimestamp': 'FILE:%Y-%m-%d %H:%M:%S',
+    'ConnectStartTime': 'FILE:%Y-%m-%d %H:%M:%S',
     'ActiveAcTime': 'seconds',
     'CsAcTime': 'seconds',
     'ActiveDcTime': 'seconds',
@@ -278,7 +376,7 @@ ads = itertools.cycle([
     "To learn how SRUM and other artifacts can enhance your forensics investigations check out SANS Windows Forensic Analysis FOR500.\n",
     "Yogesh Khatri made this tool possible. Its all based on his original research and he contributes to this project! Thanks for the support Yogesh. \n",
     "Information from the SOFTWARE hive is added to your config file. There you can customize and extend it.\n",
-    "Consider renaming wireless network names and user accounts in the configuration file so they stand out!\n"
+    "Consider renaming wireless network names and user accounts in the configuration file so they stand out!\n",
     "My class SANS SEC573 Automating Infosec with Python teaches you to develop Forensics and Incident Response tools!\n",
     "Add your Domain (investigation) specific User SIDS to known_sids in the configuration file!\n",
     "Set the dirty_words in the configuration file! NOTE: Dirty words significantly impact performance\n",
@@ -481,6 +579,7 @@ def file_timestamp(binblob):
                 dt = datetime(1601, 1, 1, 0, 0, 0, tzinfo=timezone.utc) + timedelta(microseconds=binblob / 10)
                 # Convert to local time if needed, or keep as UTC
                 # dt = dt.astimezone() # Example: convert to local timezone
+                dt = dt.replace(tzinfo=None)
                 logger.debug(f"Successfully converted FILETIME timestamp to: {dt}")
             else:
                 logger.warning(f"Input binblob is negative: {binblob}")
