@@ -1,5 +1,6 @@
 
 import logging
+import re
 import logging.handlers
 
 logger = logging.getLogger("srum_dump")
@@ -64,13 +65,14 @@ else:
             options.OUTPUT_FORMAT = "xls"
         config.set_config("dirty_words", helpers.dirty_words)
         config.set_config("network_interfaces", {})
-        config.set_config("known_sids", helpers.known_sids)
-        config.set_config("columns_to_rename", helpers.columns_to_rename)
+        #config.set_config("known_sids", helpers.known_sids)
+        #config.set_config("columns_to_rename", helpers.columns_to_rename)
         config.set_config("skip_tables", helpers.skip_tables)
         config.set_config("known_tables", helpers.known_tables)
-        config.set_config("columns_to_translate", helpers.columns_to_translate)
-        config.set_config("calculated_columns", helpers.calculated_columns)
+        #config.set_config("columns_to_translate", helpers.columns_to_translate)
+        #config.set_config("calculated_columns", helpers.calculated_columns)
         config.set_config("interface_types", helpers.interface_types)
+        config.set_config("column_markups", helpers.column_markups)
         config.save()
 
 
@@ -104,7 +106,7 @@ if pathlib.Path(os.environ['SystemRoot']).resolve() in pathlib.Path(options.SRUM
 #If a registry hive is provided extract SIDS and network profiles and put it in the config file
 if options.REG_HIVE:
     network_interfaces = helpers.load_interfaces(options.REG_HIVE)
-    known_sids = config.get_config("known_sids")
+    known_sids = helpers.known_sids
     registry_sids = helpers.load_registry_sids(options.REG_HIVE)
     if network_interfaces:
         config.set_config("network_interfaces", network_interfaces)
@@ -112,15 +114,21 @@ if options.REG_HIVE:
     if registry_sids:
         known_sids.update(registry_sids)
         config.set_config("known_sids", known_sids)
-        config.save()
 
 
 #Open the srum and allow the SRUDbIdMapTable to load then add it to the config
 #Select ESE engine
-if options.ESE_ENGINE == "pyesedb":
-    from db_ese import srum_database
-else:
+# if options.ESE_ENGINE == "pyesedb":
+#     from db_ese import srum_database
+# else:
+#     from db_dissect import srum_database
+
+#Temporarily default to pyesedb unless Win11 switch when dissect is fixed.
+if options.ESE_ENGINE == "dissect" or sys.getwindowsversion() > 22000:  #Pyesedb doesn't work on Win11
     from db_dissect import srum_database
+else:
+    from db_ese import srum_database
+
 
 #Open database using specified engine
 try:
@@ -130,6 +138,7 @@ except Exception as e:
     error_message_box("CRITICAL", f"I could not open the srum file it appears to be corrupt. Error:{str(e)}")
     sys.exit(1)
 
+config.delete_config("known_sids")
 config.set_config("SRUDbIdMapTable", ese_db.id_lookup)
 config.save() 
 
@@ -148,6 +157,7 @@ else:
     from output_xlsx import OutputXLSX
     output = OutputXLSX()
 
+
 logger.debug("Starting main processing.")
 #Enable to debug when dissect in use
 # import debugpy
@@ -161,10 +171,9 @@ progress.start(len(table_list) + 2)
 
 
 #Preload some lookup tables for speed
-trans_table = config.get_config("columns_to_translate")
+column_markups = config.get_config("column_markups")
 dirty_words = config.get_config("dirty_words")
 app_ids = config.get_config("SRUDbIdMapTable")
-user_sids = config.get_config("known_sids")
 ads = helpers.ads
 
 #Create the workbook / directory
@@ -180,25 +189,40 @@ try:  # Start of the main processing block
         logger.info(f"Now Processing table {table_name}.")
         table_object = ese_db.get_table(each_table)
 
+       # Get column markups for this table
+        all_table_markups = column_markups.get("All Tables", {})
+        table_specific_markups = column_markups.get(table_name, {})
+        current_markups = {**all_table_markups, **table_specific_markups}
 
+        column_names = list(table_object.column_names)
+        display_names = [current_markups.get(col, {}).get("friendly_name", col) for col in column_names]
+        calculated_columns = {col: markup["formula"] for col, markup in current_markups.items() if "formula" in markup}
+        column_styles = {col: markup["style"] for col, markup in current_markups.items() if "style" in markup}
+        trans_table = {col: markup["translate"] for col, markup in current_markups.items() if "translate" in markup}
+        column_widths = [len(display_name) for display_name in display_names]
+        specified_widths = {col: markup["width"] for col, markup in current_markups.items() if "width" in markup}
+        for scol,swidth in specified_widths.items():
+            if scol in column_names:
+                column_widths[ column_names.index(scol)] = int(swidth)
+            
         #Update progress window
         progress.set_current_table(table_name)
         progress.log_message(next(ads))
 
-
         #Define Columns names and add any calculated columns
-        column_names = list(map(helpers.column_friendly_names, table_object.column_names))
-        logger.info(f"Table {table_name} contains columns {str(column_names)}")
-        calculated_columns = config.get_config("calculated_columns").get(table_name)
+        logger.info(f"Table {table_name} contains columns {str(display_names)}")
         if calculated_columns:
-            column_names.extend( calculated_columns.keys() )
+            display_names.extend( calculated_columns.keys() )
+            column_widths.extend( [len(col)+2 for col in calculated_columns.keys()])
 
+
+        #Calculate column widths
 
         #Reset stats used for records pers second for each table
         start_time = time.time() 
         table_count = 0
         #Create a worksheet and loop through the records
-        with output.new_worksheet(workbook, table_name, column_names) as worksheet:
+        with output.new_worksheet(workbook, table_name, display_names, column_widths) as worksheet:
             for each_record in ese_db.get_records(each_table):
                 new_row = []
                 cell_formats = [None] * len(table_object.column_names)
@@ -211,54 +235,62 @@ try:  # Start of the main processing block
                     if elapsed_time != 0:
                         progress.update_stats(read_count, table_count // elapsed_time) 
 
-                #Format each value in the row           
+                #Format each column in the row           
                 for position, eachcol in enumerate(table_object.column_names):
-                    out_format = trans_table.get(eachcol)
+                    out_format = trans_table.get(eachcol, None)
                     embedded_value = each_record.value(eachcol)  
-                    if not out_format or not embedded_value:
-                        new_row.append( embedded_value )
+                    if not out_format or not embedded_value:  #Default
+                        val = embedded_value
+                        new_row.append( val )
                     elif out_format == "APPID":
                         val = app_ids.get(str(embedded_value),'')
                         new_row.append( val )
-                        #Colorize the dirty word cells
-                        for eachword in dirty_words:
-                            if eachword.lower() in val.lower():
-                                cell_formats[position] = ("General",f"BOLD:{dirty_words.get(eachword)}")   
                     elif out_format == "SID":
-                        val = user_sids.get(str(embedded_value),'')
+                        val = app_ids.get(str(embedded_value),'')
                         new_row.append(val)
-                        #Colorize the dirty word cells
-                        for eachword in dirty_words:
-                            if eachword.lower() in val.lower():
-                                cell_formats[position] = ("General",f"BOLD:{dirty_words.get(eachword)}")   
                     elif out_format == "OLE":
-                        new_row.append( helpers.ole_timestamp(embedded_value) )
+                        val = helpers.ole_timestamp(embedded_value)
+                        cell_formats[position] = "datetime"
+                        new_row.append( val )
                     elif out_format == "seconds":
-                        new_row.append( embedded_value/86400.0)
+                        val = embedded_value/86400.0
+                        new_row.append( val )
                     elif out_format[:5] == "FILE:":          
                         val = helpers.file_timestamp(embedded_value)
-                        if isinstance(val, datetime.datetime):
-                            val = val.strftime(out_format[5:])
-                        else:
-                            val = embedded_value
+                        cell_formats[position] = "datetime"
                         new_row.append(val)
                     elif out_format == "network_interface":
                         val = config.get_config('network_interfaces').get(str(embedded_value), embedded_value)
                         new_row.append( val )
-                        #Colorize the dirty word cells
-                        if isinstance(val, str):
-                            for eachword in dirty_words:
-                                if eachword.lower() in val.lower():
-                                    cell_formats[position] = ("General",f"BOLD:{dirty_words.get(eachword)}")  
                     elif out_format == "interface_types":
                         inttype = struct.unpack(">H6B", codecs.decode(format(embedded_value,"016x"),"hex"))[0]
-                        new_row.append( config.get_config('interface_types').get(str(inttype),inttype))
+                        val = config.get_config('interface_types').get(str(inttype),inttype)
+                        new_row.append( val )
 
-                #Add calculated columns to the end
+                    #Colorize the dirty word cells
+                    if isinstance(val, str):
+                        for eachword in dirty_words:
+                            if eachword.lower() in val.lower():
+                                cell_formats[position] = dirty_words.get(eachword)  
+
+                    #Apply named style if it is defined in the column_markups
+                    if not cell_formats[position] and eachcol in column_styles:
+                        cell_formats[position] = column_styles.get(eachcol)
+
+                #Done iterating over each column for this row
+                #Add calculated columns to the end of this row
                 if calculated_columns:        
-                    for formula_template in calculated_columns.values():
-                        formula = formula_template.replace('#ROW_NUM#', str(table_count + 1))  # Replace row number
-                        new_row.append(formula)  # Append the formula
+                    for formula in calculated_columns.values():
+                        row_calcs = re.findall(r'#ROW_NUM[+-]\d+#', formula)
+                        for calc in row_calcs:
+                            operator = '+' if '+' in calc else '-'
+                            number = int(calc.split(operator)[-1][:-1])
+                            base_row = table_count + 1
+                            result = base_row + number if operator == '+' else base_row - number
+                            result = max(result, 0)
+                            formula = formula.replace(calc, str(result))
+                        value = formula.replace('#ROW_NUM#', str(table_count + 1))
+                        new_row.append( value )
 
                 #add the new row to the table
                 output.new_entry(worksheet, new_row, cell_formats)
@@ -269,7 +301,9 @@ try:  # Start of the main processing block
 
     progress.set_current_table(f"Writing Output Files.")
     progress.log_message(f"Writing Output Files...  Please be patient\n")
+    progress.log_message(next(ads))
     output.save()
+    progress.log_message(next(ads))
     progress.set_current_table(f"Finished")
     progress.log_message(f"Finished!  Total Records: {read_count}.\n")
     progress.finished()
