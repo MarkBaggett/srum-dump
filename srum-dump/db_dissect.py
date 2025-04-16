@@ -15,7 +15,7 @@ from dissect.esedb.tools.sru import SRU, Entry
 from dissect.esedb.c_esedb import JET_coltyp
 from dissect.util.ts import oatimestamp
 
-from helpers import known_tables, skip_tables
+from helpers import skip_tables
 from helpers import ole_timestamp, blob_to_string, BinarySIDtoStringSID
 
 
@@ -73,8 +73,8 @@ class srum_database(object):
         self.config = config
         self.file_handle = None
         self.sru = None
-        self.table_to_name = known_tables
-        self.name_to_table = dict((v,k) for k,v in known_tables.items())
+        self.table_to_name = config.get_config("known_tables")
+        self.name_to_table = dict((v,k) for k,v in self.table_to_name.items())
         self.skip_tables = skip_tables
         self.connect()
         self.id_lookup = {}
