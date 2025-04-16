@@ -13,7 +13,7 @@ logger = logging.getLogger(f"srum_dump.db_ese")
 # --- End Logger Setup ---
 
 from pyesedb import table
-from helpers import blob_to_string, BinarySIDtoStringSID, known_tables, skip_tables
+from helpers import blob_to_string, BinarySIDtoStringSID, skip_tables
 from helpers import ole_timestamp
 
 warnings.simplefilter("ignore")
@@ -138,8 +138,8 @@ class srum_database(object):
         self.db_path = pathlib.Path(db_path)
         self.db = None
         self.config = config
-        self.table_to_name = known_tables
-        self.name_to_table = dict((v,k) for k,v in known_tables.items())
+        self.table_to_name = config.get_config("known_tables")
+        self.name_to_table = dict((v,k) for k,v in self.table_to_name.items())
         self.skip_tables = skip_tables
         self.id_lookup = {}
         self.connect()
