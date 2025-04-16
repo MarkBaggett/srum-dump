@@ -53,7 +53,7 @@ class OutputCSV:
                 self.file.close()
             self.writer = None
 
-    def new_worksheet(self, workbook, worksheet_name: str, column_headers: list):
+    def new_worksheet(self, workbook, worksheet_name: str, column_headers: list, column_formats: list=[]):
         """
         Creates a new CSV file (worksheet) in the workbook directory.
         Returns a context manager for writing to that file.
