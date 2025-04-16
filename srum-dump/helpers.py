@@ -185,43 +185,6 @@ column_markups = {
     }
 }
 
-columns_to_translate = {
-    'TimeStamp': 'OLE',
-    'AppId': 'APPID',
-    'UserId': 'SID',
-    'EndTime': 'FILE:%Y-%m-%d %H:%M:%S',
-    'EventTimestamp': 'FILE:%Y-%m-%d %H:%M:%S',
-    'ConnectStartTime': 'FILE:%Y-%m-%d %H:%M:%S',
-    'ActiveAcTime': 'seconds',
-    'CsAcTime': 'seconds',
-    'ActiveDcTime': 'seconds',
-    'CsDcTime': 'seconds',
-    'ActiveDischargeTime': 'seconds',
-    'CsDischargeTime': 'seconds',
-    'InterfaceLuid':'interface_types',
-    'L2ProfileId':'network_interface'
-}
-
-calculated_columns = {
-    'Energy Usage': {'Percentage Charge':'=I#ROW_NUM#/G#ROW_NUM#'}  #Add Percentage charge to Energy Usage with specified function
-}
-
-columns_to_rename = {
-    "TimeStamp": "SRUM Entry Creation (UTC)",
-    "AppId" : "Application/Process",
-    "UserId" : "User Information",
-    'AutoIncId': 'Srum ID Number', 
-    'ForegroundCycleTime': 'CPU time in Forground', 
-    'BackgroundCycleTime': 'CPU time in background', 
-    'Flags': 'Flags (BinaryData)', 
-    'EventTimestamp': 'Event Time Stamp', 
-    'ChargeLevel': 'Battery Level', 
-    'InterfaceLuid': 'Interface', 
-    'L2ProfileId': 'Profile', 
-    'L2ProfileFlags': 'Profile Flags', 
-    'BytesSent': 'Bytes Sent', 
-    'BytesRecvd': 'Bytes Received'
-}
 
 interface_types = {
     133: "IF_TYPE_CES",
@@ -386,12 +349,6 @@ ads = itertools.cycle([
     "This program was written by Twitter:@markbaggett because @ovie said so. Thanks @donaldjwilliam5!\n"
 ])
 
-def column_friendly_names( original_name):
-    """Returns renamed column or original if it was not in the config"""
-    logger.debug(f"Called column_friendly_names with original_name: {original_name}")
-    result = columns_to_rename.get( original_name, original_name)
-    logger.debug(f"Returning friendly name: {result}")
-    return result
 
 def BinarySIDtoStringSID(sid_str, sid_lookups=None):
     """Converts a binary SID to its string representation."""
