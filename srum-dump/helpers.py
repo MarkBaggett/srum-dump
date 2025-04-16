@@ -180,7 +180,7 @@ column_markups = {
         'Percentage Charge': {
             'friendly_name': 'Charge Percentage',
             'formula': '=I#ROW_NUM#/G#ROW_NUM#',
-            'style': "percent-green" 
+            'style': "percentage-green" 
         }
     }
 }
@@ -627,6 +627,54 @@ def load_registry_sids(reg_file):
 
     logger.debug(f"Finished loading registry SIDs. Found {len(sids)} SIDs.")
     return sids
+
+
+def load_srum_table_names(reg_file):
+    """
+    Given a Software hive path, extracts SRUM Extension GUIDs along with their names and descriptions.
+
+    Args:
+        reg_file (str): Path to the SOFTWARE registry hive file.
+
+    Returns:
+        dict: Combines known_tables above with any defined in the software registry hive
+    """
+    logger.debug(f"Called load_srum_table_names with reg_file: {reg_file}")
+    srum_data = {}
+    srum_key_path = r"Microsoft\Windows NT\CurrentVersion\SRUM\Extensions"
+    name_value = "(default)"
+
+    try:
+        logger.debug(f"Attempting to open registry file: {reg_file}")
+        reg_handle = Registry.Registry(reg_file)
+        logger.debug(f"Attempting to open key: {srum_key_path}")
+        key_handle = reg_handle.open(srum_key_path)
+        logger.debug(f"Iterating through subkeys of {srum_key_path}")
+
+        for ext_key in key_handle.subkeys():
+            try:
+                guid = ext_key.name()
+                logger.debug(f"Processing SRUM extension key: {guid}")
+
+                try:
+                    name = ext_key.value(name_value).value()
+                    known_tables[guid] = name
+                    logger.debug(f"Found Name for {guid}: {name}")
+                except Registry.RegistryValueNotFoundException:
+                    logger.warning(f"Value '{name_value}' not found for GUID {guid}")
+            except Exception as guid_ex:
+                logger.exception(f"Error processing SRUM GUID subkey {ext_key.name()}: {guid_ex}")
+        return known_tables
+    except Registry.RegistryKeyNotFoundException:
+        logger.exception(f"Registry key '{srum_key_path}' not found in {reg_file}.")
+        return {}
+    except Exception as e:
+        logger.exception(f"Failed to load SRUM table names from {reg_file}: {e}")
+        return {}
+
+    logger.debug(f"Finished loading SRUM table names. Found {len(srum_data)} entries.")
+    return srum_data
+
 
 def load_interfaces(reg_file):
     """Loads the names of the wireless networks from the software registry hive"""
