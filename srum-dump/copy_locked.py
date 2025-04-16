@@ -458,23 +458,23 @@ def copy_locked_files(destination_folder: pathlib.Path):
                     logger.info("SRUM recovery command completed.")
 
                 # Repair srum database file (Repair)
-                ui_window.set_current_table("Repairing SRUM Database")
-                cmd_repair = 'esentutl.exe /p SRUDB.dat'
-                ui_window.log_message(f"Running repair command: {cmd_repair} (This may take a while and might result in data loss)")
-                logger.info(f"Running repair command in {destination_folder}: {cmd_repair}")
-                # Note: /p often requires user interaction if run directly. Might need input='Y\n'.
-                # For non-interactive, consider if this step is appropriate or if recovery (/r) is sufficient.
-                # Let's run it without input first.
-                res_repair = subprocess.run(cmd_repair, shell=True, cwd=destination_folder, capture_output=True, text=True, check=False)
-                repair_output = res_repair.stdout + res_repair.stderr
-                ui_window.log_message(f"Repair output: {repair_output}")
-                logger.info(f"Repair output: {repair_output}")
-                if res_repair.returncode != 0:
-                    logger.error(f"SRUM repair failed. Return code: {res_repair.returncode}")
-                    success = False # Mark as failed if repair fails
-                    ui_window.log_message("ERROR: SRUM repair command failed.")
-                else:
-                    logger.info("SRUM repair command completed.")
+                # ui_window.set_current_table("Repairing SRUM Database")
+                # cmd_repair = 'esentutl.exe /p SRUDB.dat'
+                # ui_window.log_message(f"Running repair command: {cmd_repair} (This may take a while and might result in data loss)")
+                # logger.info(f"Running repair command in {destination_folder}: {cmd_repair}")
+                # # Note: /p often requires user interaction if run directly. Might need input='Y\n'.
+                # # For non-interactive, consider if this step is appropriate or if recovery (/r) is sufficient.
+                # # Let's run it without input first.
+                # res_repair = subprocess.run(cmd_repair, shell=True, cwd=destination_folder, capture_output=True, text=True, check=False)
+                # repair_output = res_repair.stdout + res_repair.stderr
+                # ui_window.log_message(f"Repair output: {repair_output}")
+                # logger.info(f"Repair output: {repair_output}")
+                # if res_repair.returncode != 0:
+                #     logger.error(f"SRUM repair failed. Return code: {res_repair.returncode}")
+                #     success = False # Mark as failed if repair fails
+                #     ui_window.log_message("ERROR: SRUM repair command failed.")
+                # else:
+                #     logger.info("SRUM repair command completed.")
 
                 # Re-check headers and nodes after repair attempt
                 ui_window.set_current_table("Re-checking SRUM Health")
