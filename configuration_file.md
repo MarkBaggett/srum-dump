@@ -2,15 +2,7 @@
 
 This document explains the structure and purpose of the different sections within the `srum_dump_config.json` configuration file. This file is used to process and extract information from the `SRUDB.dat` database, which is a part of the Windows System Resource Usage Monitor (SRUM).
 
-## 1. Defaults
-This section defines the main file paths and processing parameters:
-- **SRUM_INFILE**: The path to the `SRUDB.dat` database file, which stores system resource usage data.
-- **OUT_DIR**: The directory where the extracted data and reports will be saved.
-- **REG_HIVE**: The path to the Windows Registry hive (`SOFTWARE`), which may contain additional context for interpretation.
-- **ESE_ENGINE**: Specifies the database engine used to process `SRUDB.dat` (e.g., `dissect`).
-- **OUTPUT_FORMAT**: Defines the format for output files (e.g., `xls` for Excel format).
-
-## 2. Dirty Words
+## 1. Dirty Words
 This section specifies terms that are flagged during analysis.  Any string you put here that is a substring of a process, username or interface will be changed to the specified color.
 - Keywords such as `cmd.exe` are marked with an associated color (e.g., `RED`).
 - Used to highlight significant terms that might indicate anomalies or security concerns.
@@ -26,7 +18,7 @@ The value associated with each dirty word should be a valid style name defined i
 }
 ```
 
-## 3. Network Interfaces
+## 2. Network Interfaces
 This information is extracted from your SOFTWARE registry hive. It is blank if no SOFTWARE hive is provided. These entries contain a Network Identifier and a friendly name to translate it to. You can enhance your investigations by changing the names so the network in question stands out. Changing network names does not impact performance in the way that dirty words do.
 
 ```
@@ -38,24 +30,24 @@ This information is extracted from your SOFTWARE registry hive. It is blank if n
     },
 ```
 
-## 4. Known SIDs
+## 3. Known SIDs
 Maps Windows Security Identifiers (SIDs) to user-friendly names. This section contains both the well known SIDs and those extracted from the SOFTWARE hive if one was provided. You can change the names to make suspect users easier to identify. For investigations in an enterprise environment include the SIDs of all active directory users here.
 
 - Includes well-known SIDs such as `S-1-5-32-544` (Administrators) and `S-1-5-11` (Authenticated Users).
 - SIDs extracted from SOFTWARE: `S-1-5-21-829147445-693982232-3163077201-1001`.
 
-## 5. Skip Tables
+## 4. Skip Tables
 Lists database tables that should be ignored during processing:
 - Includes system tables such as `MSysObjects` and `SruDbIdMapTable`.
 
-## 6. Known Tables
+## 5. Known Tables
 Maps internal table GUIDs to their corresponding functions.  Again this provides better readablility of the worksheets (tabs) in XLS and filenames for CSV files.
 
 - `Application Timeline`: `{5C8CF1C7-7257-4F13-B223-970EF5939312}`
 - `Network Data`: `{973F5D5C-1D90-4944-BE8E-24B94231A174}`
 - `Energy Usage`: `{FEE4E14F-02A9-4550-B5CE-5FA2DA202E37}`
 
-## 7. Column Markups
+## 6. Column Markups
 
 This section consolidates column configuration. It allows for defining column properties globally (under `"All Tables"`) or specifically for individual tables (identified by their friendly name from the `known_tables` section). Table-specific settings override the "All Tables" settings.
 
@@ -132,7 +124,7 @@ The `style` attribute applies formatting defined in `output_xlsx.py`. Available 
     *   Syntax: `highlight-[background_color]` (e.g., `highlight-red`, `highlight-yellow`).
     *   Available Background Colors: `red`, `yellow`, `blue`, `green`, `purple`.
 
-## 8. Interface Types
+## 7. Interface Types
 Maps numerical network interface types to their respective descriptions:
 - `6` → `IF_TYPE_ETHERNET_CSMACD`
 - `71` → `IF_TYPE_IEEE80211` (Wi-Fi)
@@ -141,7 +133,7 @@ Maps numerical network interface types to their respective descriptions:
 This configuration file plays a crucial role in processing the `SRUDB.dat` file, allowing for structured extraction, interpretation, and reporting of Windows system resource usage data.
 
 
-## 9. SRUDbIdMapTable
+## 8. SRUDbIdMapTable
 This massive dictionary contains every string that was extracted from the activity found in srudb.dat file. While processing the tables in your srudb.dat the `AppID` and `UserID` values stored in the tables will be translated into these strings. If you know the name of malware or a particular process you can modify the strings in this table to make them stand out. String modifications here do not impact performance in the way that dirty word searches do. The entries are comprised of an App or UserId and the associated string. Do not change the keys (numbers) only change the strings.
 
 - `3` → `!!svchost.exe!1972/12/14:16:22:50!1c364![LocalService] [nsi]`
