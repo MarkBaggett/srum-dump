@@ -68,7 +68,7 @@ else:
         #config.set_config("known_sids", helpers.known_sids)
         #config.set_config("columns_to_rename", helpers.columns_to_rename)
         config.set_config("skip_tables", helpers.skip_tables)
-        config.set_config("known_tables", helpers.known_tables)
+        #config.set_config("known_tables", helpers.known_tables)
         #config.set_config("columns_to_translate", helpers.columns_to_translate)
         #config.set_config("calculated_columns", helpers.calculated_columns)
         config.set_config("interface_types", helpers.interface_types)
@@ -108,12 +108,17 @@ if options.REG_HIVE:
     network_interfaces = helpers.load_interfaces(options.REG_HIVE)
     known_sids = helpers.known_sids
     registry_sids = helpers.load_registry_sids(options.REG_HIVE)
+    srum_table_names = helpers.load_srum_table_names(options.REG_HIVE)
+    config.set_config("known_tables", srum_table_names)
+    config.save()
     if network_interfaces:
         config.set_config("network_interfaces", network_interfaces)
         config.save()
     if registry_sids:
         known_sids.update(registry_sids)
         config.set_config("known_sids", known_sids)
+
+    
 
 
 #Open the srum and allow the SRUDbIdMapTable to load then add it to the config
@@ -124,7 +129,7 @@ if options.REG_HIVE:
 #     from db_dissect import srum_database
 
 #Temporarily default to pyesedb unless Win11 switch when dissect is fixed.
-if options.ESE_ENGINE == "dissect" or sys.getwindowsversion() > 22000:  #Pyesedb doesn't work on Win11
+if options.ESE_ENGINE == "dissect" or sys.getwindowsversion().build > 22000:  #Pyesedb doesn't work on Win11
     from db_dissect import srum_database
 else:
     from db_ese import srum_database
@@ -197,6 +202,7 @@ try:  # Start of the main processing block
         column_names = list(table_object.column_names)
         display_names = [current_markups.get(col, {}).get("friendly_name", col) for col in column_names]
         calculated_columns = {col: markup["formula"] for col, markup in current_markups.items() if "formula" in markup}
+        calculated_formats = {col: markup["style"] for col, markup in current_markups.items() if "formula" in markup}
         column_styles = {col: markup["style"] for col, markup in current_markups.items() if "style" in markup}
         trans_table = {col: markup["translate"] for col, markup in current_markups.items() if "translate" in markup}
         column_widths = [len(display_name) for display_name in display_names]
@@ -267,7 +273,7 @@ try:  # Start of the main processing block
                         val = config.get_config('interface_types').get(str(inttype),inttype)
                         new_row.append( val )
 
-                    #Colorize the dirty word cells
+                    #Colorize the dirty word cells overriding any previous formatting
                     if isinstance(val, str):
                         for eachword in dirty_words:
                             if eachword.lower() in val.lower():
@@ -280,7 +286,7 @@ try:  # Start of the main processing block
                 #Done iterating over each column for this row
                 #Add calculated columns to the end of this row
                 if calculated_columns:        
-                    for formula in calculated_columns.values():
+                    for col, formula in calculated_columns.items():
                         row_calcs = re.findall(r'#ROW_NUM[+-]\d+#', formula)
                         for calc in row_calcs:
                             operator = '+' if '+' in calc else '-'
@@ -291,6 +297,7 @@ try:  # Start of the main processing block
                             formula = formula.replace(calc, str(result))
                         value = formula.replace('#ROW_NUM#', str(table_count + 1))
                         new_row.append( value )
+                        cell_formats.append( current_markups.get(col).get("style") )
 
                 #add the new row to the table
                 output.new_entry(worksheet, new_row, cell_formats)
