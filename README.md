@@ -62,7 +62,7 @@ SRUM-DUMP relies on the following third-party libraries, which are installed aut
 We welcome contributions! Feel free to submit issues, feature requests, or pull requests. If you're adding features or fixing bugs, please ensure your code follows best practices and is tested before submission.
 
 ## License
-This project is released under the [MIT License](LICENSE).
+This project is released under the [GNU GPL](LICENSE).
 
 
 
