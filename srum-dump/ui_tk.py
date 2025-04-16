@@ -800,7 +800,7 @@ def get_input_wizard(options):
                 "Optionally, select the corresponding SOFTWARE registry hive:",
                 str(software_default),
                 str(software_location),
-                [('SOFTWARE Hive', 'SOFTWARE'), ('Registry Hives', '*'), ('All files', '*.*')],
+                [('SOFTWARE Hive', 'SOFTWARE*.*'), ('Registry Hives', '*'), ('All files', '*.*')],
                 "Finish" # Change button label for last step
             )
             if software_path == 'EXIT':
