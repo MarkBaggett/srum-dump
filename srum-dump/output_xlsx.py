@@ -10,30 +10,27 @@ logger = logging.getLogger(f"srum_dump.{__name__}")
 VALID_NUMBER_FORMATS = {
     "general": "General",
     "text": "@",
-    "float": "#,##0.00",
+    "number": "#,##0.00",
     "integer": "#,##0",
-    "percent": "0.00%",
+    "percentage": "0.0000%",
     "date": "mm/dd/yyyy",
     "time": "hh:mm:ss",
     "datetime": "mm/dd/yyyy hh:mm"
 }
 
-# Define valid font colors (Excel requires RGB hex values, no alpha channel needed for xlsxwriter)
-COLOR_MAP = {
-    "red": "FF0000",
-    "blue": "0000FF",
-    "green": "008000",
-    "black": "000000",
-    "purple": "800080",
-    "yellow": "FFFF00",
-    "white": "FFFFFF"
-}
+# Define valid font colors.
+FONT_COLORS = [
+    "red",
+    "blue",
+    "yellow",
+    "green"
+]
 
 class OutputXLSX:
     """
     A class for writing Excel workbooks using xlsxwriter.
     Each worksheet is managed by a context manager for efficient resource handling.
-    Supports format styles for common formats (e.g., 'general-red', 'percent-blue-bold') and 
+    Supports format styles for common formats (e.g., 'general-red', 'percentage-blue-bold') and 
     tuple-based formatting (e.g., ('percent', 'bold:red')) for flexibility.
     Highlight styles use the 'General' number format to display varied data types naturally.
     Handles bytes-to-string conversion and sets column widths based on header lengths.
@@ -72,12 +69,12 @@ class OutputXLSX:
                 self.format_map[style_name] = fmt
                 logger.debug(f"Registered style: {style_name} with format {excel_format}")
 
-                for color in COLOR_MAP.keys():
+                for color in FONT_COLORS:
                     style_name = f"{num_format}-{color}"
                     fmt = wb.add_format({
                         'font_name': 'Calibri',
                         'font_size': 11,
-                        'font_color': f"#{COLOR_MAP[color]}",
+                        'font_color': f"{color}",
                         'align': 'left',
                         'valign': 'top',
                         'text_wrap': True,
@@ -90,7 +87,7 @@ class OutputXLSX:
                     fmt = wb.add_format({
                         'font_name': 'Calibri',
                         'font_size': 11,
-                        'font_color': f"#{COLOR_MAP[color]}",
+                        'font_color': f"{color}",
                         'bold': True,
                         'align': 'left',
                         'valign': 'top',
@@ -112,8 +109,8 @@ class OutputXLSX:
                 fmt = wb.add_format({
                     'font_name': 'Calibri',
                     'font_size': 11,
-                    'font_color': f"#{COLOR_MAP[font_color]}",
-                    'bg_color': f"#{COLOR_MAP[bg_color]}",
+                    'font_color': f"{font_color}",
+                    'bg_color': f"{bg_color}",
                     'align': 'left',
                     'valign': 'top',
                     'text_wrap': True,
@@ -262,7 +259,7 @@ class OutputXLSX:
 
         :param worksheet: The worksheet object (as yielded by the context manager).
         :param entry: List of cell values (may contain bytes or strings).
-        :param format_options: List of format specifiers (tuples or strings), same length as entry, or None.
+        :param format_options: List of format specifiers (strings), same length as entry, or None.
         """
         format_options = format_options or []
         logger.debug(f"Called new_entry for sheet '{worksheet.name}' with {len(entry)} values. Format options provided: {bool(format_options)}")
@@ -280,42 +277,7 @@ class OutputXLSX:
                     continue
 
                 try:
-                    if isinstance(format_value, (list, tuple)) and len(format_value) == 2:
-                        cell_format, font_format = format_value
-                        logger.debug(f"Processing tuple format for row {row_idx}, col {col_idx}: cell='{cell_format}', font='{font_format}'")
-
-                        fmt_dict = {
-                            'font_name': 'Calibri',
-                            'font_size': 11,
-                            'align': 'left',
-                            'valign': 'top',
-                            'text_wrap': True
-                        }
-
-                        if cell_format:
-                            cell_format = cell_format.lower()
-                            if cell_format in VALID_NUMBER_FORMATS:
-                                fmt_dict['num_format'] = VALID_NUMBER_FORMATS[cell_format]
-                                logger.debug(f"Applied number format '{VALID_NUMBER_FORMATS[cell_format]}' to cell {row_idx},{col_idx}")
-                            else:
-                                logger.warning(f"Invalid cell format specified: '{cell_format}' for cell {row_idx},{col_idx}. Using default.")
-
-                        if font_format:
-                            font_parts = font_format.split(":")
-                            font_style = font_parts[0].upper()
-                            font_color_name = font_parts[1].lower() if len(font_parts) > 1 else "black"
-
-                            if font_color_name in COLOR_MAP:
-                                fmt_dict['font_color'] = f"#{COLOR_MAP[font_color_name]}"
-                                fmt_dict['bold'] = (font_style == "BOLD")
-                                logger.debug(f"Applied font (Bold={fmt_dict['bold']}, Color={font_color_name}) to cell {row_idx},{col_idx}")
-                            else:
-                                logger.warning(f"Invalid font color specified: '{font_color_name}' for cell {row_idx},{col_idx}. Skipping font format.")
-
-                        fmt = self.wb.add_format(fmt_dict)
-                        worksheet.write(row_idx, col_idx, value, fmt)
-
-                    elif isinstance(format_value, str):
+                    if isinstance(format_value, str):
                         format_value = format_value.lower()
                         logger.debug(f"Processing format style for row {row_idx}, col {col_idx}: style='{format_value}'")
                         if format_value in self.format_map:
@@ -325,7 +287,7 @@ class OutputXLSX:
                             logger.warning(f"Invalid format style specified: '{format_value}' for cell {row_idx},{col_idx}. Writing without format.")
                             worksheet.write(row_idx, col_idx, value)
                     else:
-                        logger.warning(f"Invalid format_value structure at row {row_idx}, col {col_idx}: {format_value}. Expected tuple or string. Writing without format.")
+                        logger.warning(f"Invalid format_value structure at row {row_idx}, col {col_idx}: {format_value}. Expected string. Writing without format.")
                         worksheet.write(row_idx, col_idx, value)
 
                 except Exception as cell_format_ex:
