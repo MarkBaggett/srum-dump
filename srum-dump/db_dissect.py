@@ -1,7 +1,5 @@
 import pathlib
-import struct
 import codecs
-import uuid
 from datetime import datetime
 import logging
 

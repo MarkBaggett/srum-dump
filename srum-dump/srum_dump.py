@@ -1,7 +1,6 @@
 
 import logging
 import re
-import logging.handlers
 
 logger = logging.getLogger("srum_dump")
 null_handler = logging.NullHandler()
@@ -65,12 +64,7 @@ else:
             options.OUTPUT_FORMAT = "xls"
         config.set_config("dirty_words", helpers.dirty_words)
         config.set_config("network_interfaces", {})
-        #config.set_config("known_sids", helpers.known_sids)
-        #config.set_config("columns_to_rename", helpers.columns_to_rename)
         config.set_config("skip_tables", helpers.skip_tables)
-        #config.set_config("known_tables", helpers.known_tables)
-        #config.set_config("columns_to_translate", helpers.columns_to_translate)
-        #config.set_config("calculated_columns", helpers.calculated_columns)
         config.set_config("interface_types", helpers.interface_types)
         config.set_config("column_markups", helpers.column_markups)
         config.save()
@@ -119,20 +113,12 @@ if options.REG_HIVE:
         config.set_config("known_sids", known_sids)
 
     
-
-
 #Open the srum and allow the SRUDbIdMapTable to load then add it to the config
 #Select ESE engine
-# if options.ESE_ENGINE == "pyesedb":
-#     from db_ese import srum_database
-# else:
-#     from db_dissect import srum_database
-
-#Temporarily default to pyesedb unless Win11 switch when dissect is fixed.
-if options.ESE_ENGINE == "dissect" or sys.getwindowsversion().build > 22000:  #Pyesedb doesn't work on Win11
-    from db_dissect import srum_database
-else:
+if options.ESE_ENGINE == "pyesedb":
     from db_ese import srum_database
+else:
+    from db_dissect import srum_database
 
 
 #Open database using specified engine
