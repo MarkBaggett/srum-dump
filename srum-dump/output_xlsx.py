@@ -15,7 +15,7 @@ VALID_NUMBER_FORMATS = {
     "percentage": "0.0000%",
     "date": "mm/dd/yyyy",
     "time": "hh:mm:ss",
-    "datetime": "mm/dd/yyyy hh:mm"
+    "datetime": "yyyy-mm-dd hh:mm:ss"
 }
 
 # Define valid font colors.
@@ -58,10 +58,12 @@ class OutputXLSX:
 
             for num_format, excel_format in VALID_NUMBER_FORMATS.items():
                 style_name = num_format
+                # Default alignment based on format type
+                alignment = 'right' if num_format in ['number', 'integer', 'percentage'] else 'left'
                 fmt = wb.add_format({
                     'font_name': 'Calibri',
                     'font_size': 11,
-                    'align': 'left',
+                    'align': alignment,
                     'valign': 'top',
                     'text_wrap': True,
                     'num_format': excel_format
@@ -71,11 +73,13 @@ class OutputXLSX:
 
                 for color in FONT_COLORS:
                     style_name = f"{num_format}-{color}"
+                    # Default alignment based on format type
+                    alignment = 'right' if num_format in ['number', 'integer', 'percentage'] else 'left'
                     fmt = wb.add_format({
                         'font_name': 'Calibri',
                         'font_size': 11,
                         'font_color': f"{color}",
-                        'align': 'left',
+                        'align': alignment,
                         'valign': 'top',
                         'text_wrap': True,
                         'num_format': excel_format
@@ -84,12 +88,14 @@ class OutputXLSX:
                     logger.debug(f"Registered style: {style_name} with format {excel_format}")
 
                     style_name = f"{num_format}-{color}-bold"
+                    # Default alignment based on format type
+                    alignment = 'right' if num_format in ['number', 'integer', 'percentage'] else 'left'
                     fmt = wb.add_format({
                         'font_name': 'Calibri',
                         'font_size': 11,
                         'font_color': f"{color}",
                         'bold': True,
-                        'align': 'left',
+                        'align': alignment,
                         'valign': 'top',
                         'text_wrap': True,
                         'num_format': excel_format

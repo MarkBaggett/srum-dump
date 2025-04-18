@@ -176,39 +176,61 @@ workbook = output.new_workbook( results_path )
 read_count = 0
 try:  # Start of the main processing block
     for each_table in table_list:
+        #Get table objects and name
         table_name = config.get_config("known_tables").get(each_table, each_table)
-        logger.info(f"Now Processing table {table_name}.")
         table_object = ese_db.get_table(each_table)
+        logger.info(f"Now Processing table {table_name}.")
 
-       # Get column markups for this table
-        all_table_markups = column_markups.get("All Tables", {})
-        table_specific_markups = column_markups.get(table_name, {})
-        current_markups = {**all_table_markups, **table_specific_markups}
-
-        column_names = list(table_object.column_names)
-        display_names = [current_markups.get(col, {}).get("friendly_name", col) for col in column_names]
-        calculated_columns = {col: markup["formula"] for col, markup in current_markups.items() if "formula" in markup}
-        calculated_formats = {col: markup["style"] for col, markup in current_markups.items() if "formula" in markup}
-        column_styles = {col: markup["style"] for col, markup in current_markups.items() if "style" in markup}
-        trans_table = {col: markup["translate"] for col, markup in current_markups.items() if "translate" in markup}
-        column_widths = [len(display_name) for display_name in display_names]
-        specified_widths = {col: markup["width"] for col, markup in current_markups.items() if "width" in markup}
-        for scol,swidth in specified_widths.items():
-            if scol in column_names:
-                column_widths[ column_names.index(scol)] = int(swidth)
-            
         #Update progress window
         progress.set_current_table(table_name)
         progress.log_message(next(ads))
 
-        #Define Columns names and add any calculated columns
+       # Get column markups for this table and combine with defaults
+        all_table_markups = column_markups.get("All Tables", {})
+        table_specific_markups = column_markups.get(table_name, {}) #They maybe in config as friendly names
+        table_specific_markups2 = column_markups.get(each_table, {}) #They maybe in config as GUIDS (friendlies change)
+   
+        #We will now combine the markups from ALL_TABLES and the table specfic uverrides (either by friendly name of guid)
+        current_markups = {}
+        # Collect all unique column names from all three sources
+        all_columns = set(all_table_markups.keys()).union(set(table_specific_markups.keys()), set(table_specific_markups2.keys()))
+        # Merge attributes for each column
+        for column in all_columns:
+            # Start with default attributes for this column
+            column_attrs = all_table_markups.get(column, {}).copy()
+            
+            # Update with attributes from table_specific_markups
+            table_attrs1 = table_specific_markups.get(column, {})
+            column_attrs.update(table_attrs1)
+            
+            # Update with attributes from table_specific_markups2
+            table_attrs2 = table_specific_markups2.get(column, {})
+            column_attrs.update(table_attrs2)
+            
+            # Store the merged attributes for this column
+            current_markups[column] = column_attrs
+
+        #Get column names and configuration settings for processing
+        column_names = list(table_object.column_names)
+        display_names = [current_markups.get(col, {}).get("friendly_name", col) for col in column_names]
+        calculated_columns = {col: markup["formula"] for col, markup in current_markups.items() if "formula" in markup}
+        #calculated_formats = {col: markup["style"] for col, markup in current_markups.items() if "formula" in markup}
+        column_styles = {col: markup["style"] for col, markup in current_markups.items() if "style" in markup}
+        trans_table = {col: markup["translate"] for col, markup in current_markups.items() if "translate" in markup}
+        specified_widths = {col: markup["width"] for col, markup in current_markups.items() if "width" in markup}
+
+        #Add calculated columns to column lists before important styling calculations and processing happens
         logger.info(f"Table {table_name} contains columns {str(display_names)}")
         if calculated_columns:
             display_names.extend( calculated_columns.keys() )
-            column_widths.extend( [len(col)+2 for col in calculated_columns.keys()])
+            column_names.extend( calculated_columns.keys() )
 
-
-        #Calculate column widths
+        #Set Column Widths. Default to column name width - Override based on column_markups config
+        #This must be done before the worksheet is created
+        column_widths = [len(display_name) for display_name in display_names]
+        for scol,swidth in specified_widths.items():
+            if scol in column_names:
+                column_widths[ column_names.index(scol) ] = int(swidth)
 
         #Reset stats used for records pers second for each table
         start_time = time.time() 

@@ -29,7 +29,7 @@ logger.debug(f"{'*'*1000}")
 skip_tables = ['MSysObjects', 'MSysObjectsShadow', 'MSysObjids', 'MSysLocales','SruDbIdMapTable', 'SruDbCheckpointTable']
 
 dirty_words = {
-    'put a process user or wifi network name here before the colon': 'general-red-bold',
+    'put a process user or wifi network name here before the colon': 'highlight-blue',
     'After the colon put a color in all caps':'highlight-red',
     'These dirty words SIGNIFICANTLY impact performance use with caution':'highlight-yellow'
 }
@@ -176,12 +176,36 @@ column_markups = {
         }
     },
     'Energy Usage': {
-        # Example override (optional, adjust as needed)
         'Percentage Charge': {
             'friendly_name': 'Charge Percentage',
             'formula': '=I#ROW_NUM#/G#ROW_NUM#',
             'style': "percentage-green" 
+        },
+        'AppId': {'width': '5' },
+        'UserId': {'width': '5' }
+    },
+    '{973F5D5C-1D90-4944-BE8E-24B94231A174}' : {   #Network Usage
+        'Total Bytes': {
+            'friendly_name': 'Total Bytes',
+            'formula': '=sum(H#ROW_NUM#:I#ROW_NUM#)',
+            'style': "number-green" 
         }
+    },
+    '{DD6636C4-8929-4683-974E-22C046A43763}': {    #Network Connections
+            'Calculated Stop Time': {
+                'friendly_name': 'Calculated Stop Time',
+                'formula': '=H#ROW_NUM#+(G#ROW_NUM#/86400)',
+                'style': "datetime-green" 
+            },
+            'AppId': {'width': '5' },
+            'UserId': {'width': '5' }
+        },
+    '{FEE4E14F-02A9-4550-B5CE-5FA2DA202E37}LT': {   #Energy Usage Long Term
+            'AppId': {'width': '5' },
+            'UserId': {'width': '5' }
+    },
+    '{7ACBBAA3-D029-4BE4-9A7A-0885927F1D8F}': {   #VFU
+            'AppId': {'width': '5' }
     }
 }
 
