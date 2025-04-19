@@ -24,7 +24,6 @@ Alternatively, you can clone and run the project from the source code.
 3. **Select the SRUDB.DAT file**:
    - This is a required file.
    - If selecting `C:\Windows\System32\sru\srudb.dat` on a live system, administrative privileges are required.
-   - Windows 11 hosts may have issues extracting SRUM data, but Windows 11 virtual machines work fine. See the [Issues](https://github.com/MarkBaggett/srum-dump/issues) section for more details.
 4. **(Optional) Select the SOFTWARE registry hive**:
    - This file provides useful additional context.
    - If unavailable, leave this field blank.
