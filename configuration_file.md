@@ -2,6 +2,10 @@
 
 This document explains the structure and purpose of the different sections within the `srum_dump_config.json` configuration file. This file is used to process and extract information from the `SRUDB.dat` database, which is a part of the Windows System Resource Usage Monitor (SRUM).
 
+By taking a few minutes to customize this Document to indicate dirty-words relevate to your investigation you can make finding them easier when analyzing the results.
+
+Note that this configuration file is generated after an initial analysis of the `srudb.dat` and the `SOFTWARE` registry hive. All processes, users and networks that will be extracted from the database are identified and listed in this configuration file without the supporting dates and additional detail from the full analysis. The configuration file can serve as a quick check to confirm what you are searching for is in the database. You also have an opportunity to edit strings that will appear in the SRUM so they stand out during your investigation.
+
 ## 1. Dirty Words
 This section specifies terms that are flagged during analysis.  Any string you put here that is a substring of a process, username or interface will be changed to the specified color.
 - Keywords such as `cmd.exe` are marked with an associated color (e.g., `RED`).
@@ -17,6 +21,15 @@ The value associated with each dirty word should be a valid style name defined i
     "suspicious_process": "general-red-bold"
 }
 ```
+You can have as many dirty words as you like. The recommended color schemes for dirty words are:
+
+- `highlight-red`
+- `highlight-blue`
+- `highlight-yellow`
+- `highlight-green`
+- `highlight-purple`
+
+For additional coloring options see the "Style Options" section in column-markups below.
 
 ## 2. Network Interfaces
 This information is extracted from your SOFTWARE registry hive. It is blank if no SOFTWARE hive is provided. These entries contain a Network Identifier and a friendly name to translate it to. You can enhance your investigations by changing the names so the network in question stands out. Changing network names does not impact performance in the way that dirty words do.
