@@ -169,9 +169,32 @@ class OutputXLSX:
                 self.logger.exception(f"Error during XLSXWorksheetContext initialization: {e}")
                 raise
 
+        def _get_unique_worksheet_name(self):
+            """
+            Ensures worksheet name is unique and <= 31 chars.
+            If not unique, trims and appends -01, -02, etc.
+            """
+            max_len = 31
+            desired_name = self.worksheet_name
+            base_name = desired_name[:max_len]
+            existing = set(self.workbook.sheetnames if hasattr(self.workbook, "sheetnames") else [ws.get_name() for ws in getattr(self.workbook, "worksheets", [])])
+            if hasattr(self.workbook, "worksheets"):
+                existing = set(ws.get_name() for ws in self.workbook.worksheets())
+            name = base_name
+            counter = 1
+            while name in existing:
+                suffix = f"-{counter:02d}"
+                trim_len = max_len - len(suffix)
+                name = base_name[:trim_len] + suffix
+                counter += 1
+                if counter > 99:
+                    raise ValueError("Too many duplicate worksheet names.")
+            self.worksheet_name = name
+
         def __enter__(self):
             """Creates the worksheet, sets up headers, and sets column widths based on header lengths."""
             self.logger.debug(f"Entering context for sheet: '{self.worksheet_name}'")
+            self._get_unique_worksheet_name()  
             try:
                 self.logger.info(f"Creating sheet: '{self.worksheet_name}'")
                 self.worksheet = self.workbook.add_worksheet(self.worksheet_name)
