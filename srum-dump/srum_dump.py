@@ -63,6 +63,8 @@ else:
         if options.OUTPUT_FORMAT == None:
             options.OUTPUT_FORMAT = "xls"
         config.set_config("dirty_words", helpers.dirty_words)
+        config.set_config("known_tables", helpers.known_tables)
+        config.set_config("known_sids", helpers.known_sids)     
         config.set_config("network_interfaces", {})
         config.set_config("skip_tables", helpers.skip_tables)
         config.set_config("interface_types", helpers.interface_types)
