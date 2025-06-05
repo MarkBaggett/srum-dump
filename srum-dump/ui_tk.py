@@ -396,7 +396,7 @@ def get_user_input(options):
     root = None
     try:
         root = tk.Tk()
-        root.title("SRUM_DUMP 3.1")
+        root.title("SRUM_DUMP 3.2")
         root.geometry("800x400")
         root.attributes('-topmost', True)
         root.after(20, remove_topmost, root)

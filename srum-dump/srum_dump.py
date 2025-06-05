@@ -159,7 +159,7 @@ logger.debug("Starting main processing.")
 # debugpy.wait_for_client()
 
 #Display Progress Window
-progress = ProgressWindow("SRUM-DUMP 3.1")
+progress = ProgressWindow("SRUM-DUMP 3.2")
 progress.start(len(table_list) + 2)
 
 

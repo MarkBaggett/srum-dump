@@ -3,7 +3,7 @@ requires = ["setuptools", "wheel"]
 
 [tool.poetry]
 name = "SRUM-DUMP"
-version = "3.1.0"
+version = "3.2.0"
 description = "SRUM-DUMP"
 authors = ["MarkBaggett"]
 requires-python = ">=3.12"
