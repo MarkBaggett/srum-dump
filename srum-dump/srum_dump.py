@@ -254,8 +254,9 @@ try:  # Start of the main processing block
                 #Format each column in the row           
                 for position, eachcol in enumerate(table_object.column_names):
                     out_format = trans_table.get(eachcol, None)
-                    embedded_value = each_record.value(eachcol)  
-                    if not out_format or not embedded_value:  #Default
+                    embedded_value = each_record.value(eachcol)
+                  
+                    if (not out_format) or (not embedded_value) or (embedded_value == "Empty"):  #Default
                         val = embedded_value
                         new_row.append( val )
                     elif out_format == "APPID":
