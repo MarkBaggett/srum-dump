@@ -4,8 +4,10 @@ import pathlib
 import os
 import pathlib
 import sys
-import logging 
+import logging
 import time
+import subprocess
+import platform
 
 import helpers
 
@@ -30,6 +32,26 @@ else:
 
 icon_path = os.path.join(base_path, 'srum_dump.ico')
 logger.debug(f"Icon path: {icon_path}")
+
+
+def open_file_with_default_app(file_path):
+    """Opens a file with the default application for the platform."""
+    logger.debug(f"Opening file with default app: {file_path}")
+    try:
+        system = platform.system()
+        if system == 'Windows':
+            os.startfile(file_path)
+        elif system == 'Darwin':  # macOS
+            subprocess.run(['open', file_path], check=True)
+        elif system == 'Linux':
+            subprocess.run(['xdg-open', file_path], check=True)
+        else:
+            logger.warning(f"Unknown platform: {system}. Cannot open file.")
+            raise NotImplementedError(f"File opening not supported on {system}")
+        logger.info(f"Successfully opened file: {file_path}")
+    except Exception as e:
+        logger.exception(f"Error opening file: {e}")
+        raise
 
 class ProgressWindow:
     def __init__(self, title="SRUM Dump Progress"):
@@ -322,9 +344,8 @@ def get_user_input(options):
             if not config_path.exists():
                 logger.warning(f"Config file does not exist, creating empty file: {config_path}")
                 config_path.touch() # Create empty file if it doesn't exist
-            # Use os.startfile for default editor on Windows, more robust than assuming notepad.exe
-            os.startfile(config_path)
-            # subprocess.run(['notepad.exe', config_path_str]) # Less portable alternative
+            # Use platform-appropriate file opener
+            open_file_with_default_app(str(config_path))
             logger.info(f"Opened config file for editing: {config_path_str}")
         except Exception as e:
             logger.exception(f"Error opening config file for editing: {e}")

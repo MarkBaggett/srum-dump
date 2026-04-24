@@ -1,4 +1,3 @@
-
 import logging
 import re
 
@@ -12,16 +11,66 @@ import argparse
 import os
 import pathlib
 import sys
-import ctypes
-import time
-import struct
-import codecs
 import datetime
-import copy_locked
+
+# Import helpers first (no GUI dependencies)
 import helpers
 
-# Import the desired UI and DB modules
-from ui_tk import get_user_input, get_input_wizard, error_message_box, ProgressWindow
+# Headless stub implementations
+def _headless_error_message_box(title, message):
+    print(f"ERROR: {title}\n{message}", file=sys.stderr)
+
+class _HeadlessProgressWindow:
+    """Stub ProgressWindow for headless/CLI mode"""
+    def __init__(self, title=""):
+        self.root = None
+    def start(self, total): pass
+    def set_current_table(self, name):
+        print(f"Processing:  {name}")
+    def log_message(self, msg):
+        print(msg)
+    def update_stats(self, records, rps): pass
+    def finished(self): pass
+    def close(self): pass
+
+def _headless_get_user_input(options):
+    _headless_error_message_box("Error", "GUI not available.  Please use --NO_CONFIRM (-q) flag.")
+    sys.exit(1)
+
+def _headless_get_input_wizard(options):
+    _headless_error_message_box("Error", "GUI not available. Please provide all arguments:  -i, -o")
+    sys.exit(1)
+
+# Try to import GUI components, but make them optional
+try:
+    from ui_tk import get_user_input, get_input_wizard, error_message_box, ProgressWindow
+    UI_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"UI not available:  {e}. Running in headless mode.")
+    UI_AVAILABLE = False
+
+if not UI_AVAILABLE:
+    error_message_box = _headless_error_message_box
+    ProgressWindow = _HeadlessProgressWindow
+    get_user_input = _headless_get_user_input
+    get_input_wizard = _headless_get_input_wizard
+
+# Try to import copy_locked, but make it optional (Windows-only)
+try:
+    import copy_locked
+    COPY_LOCKED_AVAILABLE = True
+except ImportError as e:
+    logger.warning(f"copy_locked not available: {e}.  Live file extraction disabled.")
+    COPY_LOCKED_AVAILABLE = False
+
+# Try to import ctypes for admin check, but make it optional
+try: 
+    import ctypes
+    CTYPES_AVAILABLE = True
+except ImportError: 
+    CTYPES_AVAILABLE = False
+    logger.warning("ctypes not available.  Admin checks disabled.")
+
 from config_manager import ConfigManager
 
 
@@ -35,6 +84,10 @@ parser.add_argument("--DEBUG","-v", action="store_true",help="Enable verbose log
 parser.add_argument("--NO_CONFIRM","-q", action="store_true",help="Do not show the confirmation dialog box.")
 options = parser.parse_args()
 
+if options.NO_CONFIRM:
+    ProgressWindow = _HeadlessProgressWindow
+    error_message_box = _headless_error_message_box
+
 # --- Logging Setup ---
 log_file_path = None # Initialize in case OUT_DIR isn't set initially
 logger.setLevel(logging.INFO) # INFO logging by default
@@ -45,18 +98,48 @@ if options.DEBUG:
 #If an OUT_DIR was specified on the cli we check it for a config
 if options.OUT_DIR and options.SRUM_INFILE:
     config_path = pathlib.Path(options.OUT_DIR).joinpath("srum_dump_config.json")
+    
+    # Create the output directory if it doesn't exist
+    pathlib.Path(options.OUT_DIR).mkdir(parents=True, exist_ok=True)
+    
     config = ConfigManager(config_path)
+    
+    # If config doesn't exist, create it with defaults
     if not config_path.is_file():
-        error_message_box("Error", "Configuration file not found. Please run the program without the OUT_DIR option first.")
-        sys.exit(1)
-    options.OUT_DIR = str(config_path.parent)  #We want this to always be the place where config is stored.
+        logger.info("Creating new configuration file")
+        if options.ESE_ENGINE == None:
+            options.ESE_ENGINE = "dissect"
+        if options.OUTPUT_FORMAT == None:
+            options.OUTPUT_FORMAT = "xls"
+        config.set_config("dirty_words", helpers.dirty_words)
+        config.set_config("known_tables", helpers.known_tables)
+        config.set_config("known_sids", helpers.known_sids)
+        config.set_config("network_interfaces", {})
+        config.set_config("skip_tables", helpers.skip_tables)
+        config.set_config("interface_types", helpers.interface_types)
+        config.set_config("column_markups", helpers.column_markups)
+        config.save()
+    
+    options.OUT_DIR = str(config_path.parent)
 else:
-    get_input_wizard(options)  #Get paths with wizard
-    #Create a config
+    if not UI_AVAILABLE and not (options.SRUM_INFILE and options.OUT_DIR):
+        error_message_box("Error", "GUI not available. Please provide required arguments:  -i <SRUM_FILE> -o <OUTPUT_DIR>")
+        sys.exit(1)
+    
+    if UI_AVAILABLE and not options.NO_CONFIRM:
+        get_input_wizard(options)  # Get paths with wizard
+    elif not options.SRUM_INFILE or not options.OUT_DIR:
+        error_message_box("Error", "Required arguments missing. Use:  -i <SRUM_FILE> -o <OUTPUT_DIR> -q")
+        sys.exit(1)
+    
+    # Create the output directory if it doesn't exist
+    pathlib.Path(options.OUT_DIR).mkdir(parents=True, exist_ok=True)
+    
+    # Create a config
     config_path = pathlib.Path(options.OUT_DIR).joinpath("srum_dump_config.json")
     config = ConfigManager(config_path)
-    #There is no config so lets set some defaults on CLI arguments that were not explicitly set
-    #And create a configuration file
+    
+    # There is no config so set some defaults
     if not config_path.is_file():
         if options.ESE_ENGINE == None:
             options.ESE_ENGINE = "dissect"
@@ -64,7 +147,7 @@ else:
             options.OUTPUT_FORMAT = "xls"
         config.set_config("dirty_words", helpers.dirty_words)
         config.set_config("known_tables", helpers.known_tables)
-        config.set_config("known_sids", helpers.known_sids)     
+        config.set_config("known_sids", helpers.known_sids)
         config.set_config("network_interfaces", {})
         config.set_config("skip_tables", helpers.skip_tables)
         config.set_config("interface_types", helpers.interface_types)
@@ -86,17 +169,22 @@ logger.info(f"Using options: {options}")
 
 
 #Check SRUM_INFILE to see if we need to extract a copy of the SRUM
-if pathlib.Path(os.environ['SystemRoot']).resolve() in pathlib.Path(options.SRUM_INFILE).parents:
-    if ctypes.windll.shell32.IsUserAnAdmin() != 1:
-        error_message_box("Error", "The file you selected is locked by the operating system. Please run this program as an administrator or select a different file.")   
-        sys.exit(1)
-    else:
-        success = copy_locked.copy_locked_files(pathlib.Path(options.OUT_DIR))
-        options.SRUM_INFILE = str(pathlib.Path(options.OUT_DIR).joinpath("SRUDB.dat"))
-        options.REG_HIVE =  str(pathlib.Path(options.OUT_DIR).joinpath("SOFTWARE"))
-        options.OUT_DIR = str(pathlib.Path(options.OUT_DIR))
-        if not success:
+if CTYPES_AVAILABLE and sys.platform == 'win32':
+    if pathlib.Path(os.environ['SystemRoot']).resolve() in pathlib.Path(options.SRUM_INFILE).parents:
+        if ctypes.windll.shell32.IsUserAnAdmin() != 1:
+            error_message_box("Error", "The file you selected is locked by the operating system. Please run this program as an administrator or select a different file.")   
             sys.exit(1)
+        else:
+            if COPY_LOCKED_AVAILABLE: 
+                success = copy_locked.copy_locked_files(pathlib.Path(options.OUT_DIR))
+                options.SRUM_INFILE = str(pathlib.Path(options.OUT_DIR).joinpath("SRUDB.dat"))
+                options.REG_HIVE =  str(pathlib.Path(options.OUT_DIR).joinpath("SOFTWARE"))
+                options.OUT_DIR = str(pathlib.Path(options.OUT_DIR))
+                if not success:
+                    sys.exit(1)
+            else:
+                error_message_box("Error", "Cannot extract locked files:  copy_locked module not available")
+                sys.exit(1)
 
 
 #If a registry hive is provided extract SIDS and network profiles and put it in the config file
@@ -137,7 +225,10 @@ config.save()
 
 #Let User confirm the settings and paths.  Then save for reuse next time
 if not options.NO_CONFIRM:
-    get_user_input(options)
+    if UI_AVAILABLE:
+        get_user_input(options)
+    else:
+        logger.warning("Skipping user confirmation (UI not available)")
 
 #Load any configuration changes made during confirmation
 config.load()
@@ -152,11 +243,6 @@ else:
 
 
 logger.debug("Starting main processing.")
-#Enable to debug when dissect in use
-# import debugpy
-# debugpy.listen(5678)
-# print("Waiting for debugger...")
-# debugpy.wait_for_client()
 
 #Display Progress Window
 progress = ProgressWindow("SRUM-DUMP 3.2")
@@ -175,9 +261,12 @@ results_path = pathlib.Path(options.OUT_DIR).joinpath(f"SRUM-DUMP-{timestamp}")
 workbook = output.new_workbook( results_path )
 
 #record time and record count for statistics
+import time
+import struct
+import codecs
 read_count = 0
 try:  # Start of the main processing block
-    for each_table in table_list:
+    for each_table in table_list: 
         #Get table objects and name
         table_name = config.get_config("known_tables").get(each_table, each_table)
         table_object = ese_db.get_table(each_table)
@@ -216,7 +305,6 @@ try:  # Start of the main processing block
         column_names = list(table_object.column_names)
         display_names = [current_markups.get(col, {}).get("friendly_name", col) for col in column_names]
         calculated_columns = {col: markup["formula"] for col, markup in current_markups.items() if "formula" in markup}
-        #calculated_formats = {col: markup["style"] for col, markup in current_markups.items() if "formula" in markup}
         column_styles = {col: markup["style"] for col, markup in current_markups.items() if "style" in markup}
         trans_table = {col: markup["translate"] for col, markup in current_markups.items() if "translate" in markup}
         specified_widths = {col: markup["width"] for col, markup in current_markups.items() if "width" in markup}
@@ -243,13 +331,13 @@ try:  # Start of the main processing block
                 new_row = []
                 cell_formats = [None] * len(table_object.column_names)
 
-                #Statistics updating..
+                #Statistics updating.. 
                 read_count += 1
                 table_count += 1
                 if read_count % 1000 == 0:
                     elapsed_time = time.time() - start_time
                     if elapsed_time != 0:
-                        progress.update_stats(read_count, table_count // elapsed_time) 
+                        progress.update_stats(read_count, table_count // elapsed_time)
 
                 #Format each column in the row           
                 for position, eachcol in enumerate(table_object.column_names):
@@ -272,7 +360,7 @@ try:  # Start of the main processing block
                     elif out_format == "seconds":
                         val = embedded_value/86400.0
                         new_row.append( val )
-                    elif out_format[:5] == "FILE:":          
+                    elif out_format.startswith("FILE:"):
                         val = helpers.file_timestamp(embedded_value)
                         cell_formats[position] = "datetime"
                         new_row.append(val)
@@ -286,9 +374,9 @@ try:  # Start of the main processing block
 
                     #Colorize the dirty word cells overriding any previous formatting
                     if isinstance(val, str):
-                        for eachword in dirty_words:
+                        for eachword in dirty_words: 
                             if eachword.lower() in val.lower():
-                                cell_formats[position] = dirty_words.get(eachword)  
+                                cell_formats[position] = dirty_words.get(eachword)
 
                     #Apply named style if it is defined in the column_markups
                     if not cell_formats[position] and eachcol in column_styles:
@@ -332,7 +420,7 @@ except Exception as main_exception:  # Aligned with the 'try' approximatly on li
     logger.exception(f"An unexpected error occurred during main processing: {main_exception}")
     error_message_box("CRITICAL ERROR", f"An unexpected error occurred: {main_exception}\nCheck the log file for details:\n{log_file_path}")
 finally:  # Aligned with the 'try' approximatly on line 170 (main loop)
-    if 'progress' in locals() and progress.root:
+    if UI_AVAILABLE and 'progress' in locals() and progress.root:
         try:
             progress.root.mainloop()
         except Exception as ui_exception:

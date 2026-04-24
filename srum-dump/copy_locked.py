@@ -1,12 +1,29 @@
 import os
-import win32com.client
 import subprocess
 import pathlib
 import hashlib
 import re
-import logging # Added for logging
+import logging
+import sys
 
-from ui_tk import ProgressWindow
+# Platform check for Windows-specific imports
+if sys.platform == 'win32':
+    try:
+        import win32com.client
+        WINDOWS_AVAILABLE = True
+    except ImportError:
+        WINDOWS_AVAILABLE = False
+        logging.warning("pywin32 not available. Windows-specific features disabled.")
+else:
+    WINDOWS_AVAILABLE = False
+
+# Only import UI if tkinter is available
+try:
+    from ui_tk import ProgressWindow
+    UI_AVAILABLE = True
+except ImportError:
+    UI_AVAILABLE = False
+    logging.warning("UI not available. Running in headless mode.")
 
 # --- Logger Setup ---
 logger = logging.getLogger(f"srum_dump.copy_locked")
@@ -15,6 +32,8 @@ logger = logging.getLogger(f"srum_dump.copy_locked")
 
 def create_shadow_copy(volume_path):
     """Creates a Volume Shadow Copy for the given volume path."""
+    if not WINDOWS_AVAILABLE:
+        raise NotImplementedError("Shadow copy creation is only supported on Windows")
     logger.debug(f"Called create_shadow_copy with volume_path: {volume_path}")
     shadow_path = None
     try:
@@ -53,6 +72,8 @@ def create_shadow_copy(volume_path):
 
 def extract_live_file(source, destination):
     """Extracts a live file using esentutl /vss."""
+    if not WINDOWS_AVAILABLE:
+        raise NotImplementedError("Live file extraction is only supported on Windows")
     logger.debug(f"Called extract_live_file with source: {source}, destination: {destination}")
     output = ""
     try:
@@ -262,10 +283,13 @@ def confirm_srum_header(srum_path):
 
 
 def file_copy_cmd(src, dest):
-    """Copies file(s) using the native 'copy' command."""
+    """Copies file(s) using platform-appropriate command."""
     logger.debug(f"Called file_copy_cmd with src: {src}, dest: {dest}")
-    # Use /Y to suppress overwrite prompts, /V to verify
-    cmd_copy = f'copy /Y /V "{src}" "{dest}"'
+    if sys.platform == 'win32':
+        # Use /Y to suppress overwrite prompts, /V to verify
+        cmd_copy = f'copy /Y /V "{src}" "{dest}"'
+    else:
+        cmd_copy = f'cp -f "{src}" "{dest}"'
     logger.info(f"Executing copy command: {cmd_copy}")
     res = subprocess.run(cmd_copy, shell=True, capture_output=True, text=True, check=False)
     logger.debug(f"Copy command stdout: {res.stdout}")
@@ -354,6 +378,8 @@ def copy_locked_files(destination_folder: pathlib.Path):
 
     :param destination_folder: Path to save the copied files
     """
+    if not WINDOWS_AVAILABLE:
+        raise NotImplementedError("Copying locked files is only supported on Windows")
     logger.debug(f"Called copy_locked_files with destination_folder: {destination_folder}")
     ui_window = ProgressWindow("Extracting Locked files")
     ui_window.hide_record_stats()
